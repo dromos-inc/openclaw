@@ -31,6 +31,17 @@ export type EnvironmentsListParams = SchemaType<"EnvironmentsListParams">;
 export type EnvironmentsListResult = SchemaType<"EnvironmentsListResult">;
 export type EnvironmentsStatusParams = SchemaType<"EnvironmentsStatusParams">;
 export type EnvironmentsStatusResult = SchemaType<"EnvironmentsStatusResult">;
+export type SystemInfoParams = SchemaType<"SystemInfoParams">;
+export type SystemInfoResult = SchemaType<"SystemInfoResult">;
+export type WorktreeRecord = SchemaType<"WorktreeRecord">;
+export type WorktreesListParams = SchemaType<"WorktreesListParams">;
+export type WorktreesListResult = SchemaType<"WorktreesListResult">;
+export type WorktreesCreateParams = SchemaType<"WorktreesCreateParams">;
+export type WorktreesRemoveParams = SchemaType<"WorktreesRemoveParams">;
+export type WorktreesRemoveResult = SchemaType<"WorktreesRemoveResult">;
+export type WorktreesRestoreParams = SchemaType<"WorktreesRestoreParams">;
+export type WorktreesGcParams = SchemaType<"WorktreesGcParams">;
+export type WorktreesGcResult = SchemaType<"WorktreesGcResult">;
 
 /** Agent activity, identity, send, poll, wait, and wake protocol payloads. */
 export type AgentEvent = SchemaType<"AgentEvent">;

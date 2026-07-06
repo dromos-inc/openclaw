@@ -509,6 +509,94 @@ public struct EnvironmentsStatusResult: Codable, Sendable {
     }
 }
 
+public struct SystemInfoParams: Codable, Sendable {}
+
+public struct SystemInfoResult: Codable, Sendable {
+    public let machinename: String
+    public let hostname: String
+    public let platform: String
+    public let release: String
+    public let arch: String
+    public let oslabel: String
+    public let lanaddress: String?
+    public let port: Int?
+    public let nodeversion: String
+    public let pid: Int
+    public let uptimems: Int
+    public let cpucount: Int
+    public let cpumodel: String?
+    public let loadaverage: [AnyCodable]?
+    public let memorytotalbytes: Int
+    public let memoryfreebytes: Int
+    public let disktotalbytes: Int?
+    public let diskavailablebytes: Int?
+    public let diskpath: String?
+
+    public init(
+        machinename: String,
+        hostname: String,
+        platform: String,
+        release: String,
+        arch: String,
+        oslabel: String,
+        lanaddress: String?,
+        port: Int?,
+        nodeversion: String,
+        pid: Int,
+        uptimems: Int,
+        cpucount: Int,
+        cpumodel: String?,
+        loadaverage: [AnyCodable]?,
+        memorytotalbytes: Int,
+        memoryfreebytes: Int,
+        disktotalbytes: Int?,
+        diskavailablebytes: Int?,
+        diskpath: String?)
+    {
+        self.machinename = machinename
+        self.hostname = hostname
+        self.platform = platform
+        self.release = release
+        self.arch = arch
+        self.oslabel = oslabel
+        self.lanaddress = lanaddress
+        self.port = port
+        self.nodeversion = nodeversion
+        self.pid = pid
+        self.uptimems = uptimems
+        self.cpucount = cpucount
+        self.cpumodel = cpumodel
+        self.loadaverage = loadaverage
+        self.memorytotalbytes = memorytotalbytes
+        self.memoryfreebytes = memoryfreebytes
+        self.disktotalbytes = disktotalbytes
+        self.diskavailablebytes = diskavailablebytes
+        self.diskpath = diskpath
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case machinename = "machineName"
+        case hostname
+        case platform
+        case release
+        case arch
+        case oslabel = "osLabel"
+        case lanaddress = "lanAddress"
+        case port
+        case nodeversion = "nodeVersion"
+        case pid
+        case uptimems = "uptimeMs"
+        case cpucount = "cpuCount"
+        case cpumodel = "cpuModel"
+        case loadaverage = "loadAverage"
+        case memorytotalbytes = "memoryTotalBytes"
+        case memoryfreebytes = "memoryFreeBytes"
+        case disktotalbytes = "diskTotalBytes"
+        case diskavailablebytes = "diskAvailableBytes"
+        case diskpath = "diskPath"
+    }
+}
+
 public struct AgentEvent: Codable, Sendable {
     public let runid: String
     public let seq: Int
@@ -776,6 +864,7 @@ public struct AgentParams: Codable, Sendable {
     public let timeout: Int?
     public let besteffortdeliver: Bool?
     public let lane: String?
+    public let cwd: String?
     public let cleanupbundlemcponrunend: Bool?
     public let modelrun: Bool?
     public let promptmode: AnyCodable?
@@ -818,6 +907,7 @@ public struct AgentParams: Codable, Sendable {
         timeout: Int?,
         besteffortdeliver: Bool?,
         lane: String?,
+        cwd: String?,
         cleanupbundlemcponrunend: Bool?,
         modelrun: Bool?,
         promptmode: AnyCodable?,
@@ -859,6 +949,7 @@ public struct AgentParams: Codable, Sendable {
         self.timeout = timeout
         self.besteffortdeliver = besteffortdeliver
         self.lane = lane
+        self.cwd = cwd
         self.cleanupbundlemcponrunend = cleanupbundlemcponrunend
         self.modelrun = modelrun
         self.promptmode = promptmode
@@ -902,6 +993,7 @@ public struct AgentParams: Codable, Sendable {
         case timeout
         case besteffortdeliver = "bestEffortDeliver"
         case lane
+        case cwd
         case cleanupbundlemcponrunend = "cleanupBundleMcpOnRunEnd"
         case modelrun = "modelRun"
         case promptmode = "promptMode"
@@ -1020,6 +1112,180 @@ public struct WakeParams: Codable, Sendable {
         case text
         case sessionkey = "sessionKey"
         case agentid = "agentId"
+    }
+}
+
+public struct WorktreeRecord: Codable, Sendable {
+    public let id: String
+    public let name: String
+    public let repofingerprint: String
+    public let reporoot: String
+    public let path: String
+    public let branch: String
+    public let baseref: String
+    public let ownerkind: String
+    public let ownerid: String?
+    public let snapshotref: String?
+    public let createdat: Int
+    public let lastactiveat: Int
+    public let removedat: Int?
+
+    public init(
+        id: String,
+        name: String,
+        repofingerprint: String,
+        reporoot: String,
+        path: String,
+        branch: String,
+        baseref: String,
+        ownerkind: String,
+        ownerid: String?,
+        snapshotref: String?,
+        createdat: Int,
+        lastactiveat: Int,
+        removedat: Int?)
+    {
+        self.id = id
+        self.name = name
+        self.repofingerprint = repofingerprint
+        self.reporoot = reporoot
+        self.path = path
+        self.branch = branch
+        self.baseref = baseref
+        self.ownerkind = ownerkind
+        self.ownerid = ownerid
+        self.snapshotref = snapshotref
+        self.createdat = createdat
+        self.lastactiveat = lastactiveat
+        self.removedat = removedat
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case repofingerprint = "repoFingerprint"
+        case reporoot = "repoRoot"
+        case path
+        case branch
+        case baseref = "baseRef"
+        case ownerkind = "ownerKind"
+        case ownerid = "ownerId"
+        case snapshotref = "snapshotRef"
+        case createdat = "createdAt"
+        case lastactiveat = "lastActiveAt"
+        case removedat = "removedAt"
+    }
+}
+
+public struct WorktreesListParams: Codable, Sendable {}
+
+public struct WorktreesListResult: Codable, Sendable {
+    public let worktrees: [WorktreeRecord]
+
+    public init(
+        worktrees: [WorktreeRecord])
+    {
+        self.worktrees = worktrees
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case worktrees
+    }
+}
+
+public struct WorktreesCreateParams: Codable, Sendable {
+    public let reporoot: String
+    public let name: String?
+    public let baseref: String?
+
+    public init(
+        reporoot: String,
+        name: String?,
+        baseref: String?)
+    {
+        self.reporoot = reporoot
+        self.name = name
+        self.baseref = baseref
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case reporoot = "repoRoot"
+        case name
+        case baseref = "baseRef"
+    }
+}
+
+public struct WorktreesRemoveParams: Codable, Sendable {
+    public let id: String
+    public let force: Bool?
+
+    public init(
+        id: String,
+        force: Bool?)
+    {
+        self.id = id
+        self.force = force
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case force
+    }
+}
+
+public struct WorktreesRemoveResult: Codable, Sendable {
+    public let removed: Bool
+    public let snapshotref: String?
+
+    public init(
+        removed: Bool,
+        snapshotref: String?)
+    {
+        self.removed = removed
+        self.snapshotref = snapshotref
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case removed
+        case snapshotref = "snapshotRef"
+    }
+}
+
+public struct WorktreesRestoreParams: Codable, Sendable {
+    public let id: String
+
+    public init(
+        id: String)
+    {
+        self.id = id
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+    }
+}
+
+public struct WorktreesGcParams: Codable, Sendable {}
+
+public struct WorktreesGcResult: Codable, Sendable {
+    public let removed: [String]
+    public let orphansdeleted: Int
+    public let snapshotspruned: Int
+
+    public init(
+        removed: [String],
+        orphansdeleted: Int,
+        snapshotspruned: Int)
+    {
+        self.removed = removed
+        self.orphansdeleted = orphansdeleted
+        self.snapshotspruned = snapshotspruned
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case removed
+        case orphansdeleted = "orphansDeleted"
+        case snapshotspruned = "snapshotsPruned"
     }
 }
 

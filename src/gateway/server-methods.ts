@@ -126,6 +126,10 @@ const loadEnvironmentsHandlers = lazyHandlerModule(
   () => import("./server-methods/environments.js"),
   (module) => module.environmentsHandlers,
 );
+const loadWorktreesHandlers = lazyHandlerModule(
+  () => import("./server-methods/worktrees.js"),
+  (module) => module.worktreesHandlers,
+);
 const loadExecApprovalsHandlers = lazyHandlerModule(
   () => import("./server-methods/exec-approvals.js"),
   (module) => module.execApprovalsHandlers,
@@ -399,6 +403,16 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   }),
   ...createLazyCoreHandlers({
     methods: [
+      "worktrees.list",
+      "worktrees.create",
+      "worktrees.remove",
+      "worktrees.restore",
+      "worktrees.gc",
+    ],
+    loadHandlers: loadWorktreesHandlers,
+  }),
+  ...createLazyCoreHandlers({
+    methods: [
       "exec.approvals.get",
       "exec.approvals.set",
       "exec.approvals.node.get",
@@ -556,6 +570,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
       "last-heartbeat",
       "set-heartbeats",
       "system-presence",
+      "system.info",
       "system-event",
     ],
     loadHandlers: loadSystemHandlers,
