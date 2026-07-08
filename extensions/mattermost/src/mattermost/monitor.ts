@@ -1653,6 +1653,10 @@ export async function monitorMattermostProvider(opts: MonitorMattermostOpts = {}
           ReplyToId: effectiveReplyToId,
           MessageThreadId: effectiveReplyToId,
           Timestamp: typeof post.create_at === "number" ? post.create_at : undefined,
+          InboundEventKind:
+            kind === "direct" || mentionDecision.effectiveWasMentioned || commandAuthorized
+              ? "user_request"
+              : "room_event",
           WasMentioned: kind !== "direct" ? mentionDecision.effectiveWasMentioned : undefined,
           CommandAuthorized: commandAuthorized,
           // Tag typed text-slash control commands (e.g. ` /new`, ` /reset` sent via the regular

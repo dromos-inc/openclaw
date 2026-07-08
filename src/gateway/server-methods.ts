@@ -194,6 +194,10 @@ const loadSessionsFilesHandlers = lazyHandlerModule(
   () => import("./server-methods/sessions-files.js"),
   (module) => module.sessionsFilesHandlers,
 );
+const loadFsDirsHandlers = lazyHandlerModule(
+  () => import("./server-methods/fs-dirs.js"),
+  (module) => module.fsDirsHandlers,
+);
 const loadSessionsHandlers = lazyHandlerModule(
   () => import("./server-methods/sessions.js"),
   (module) => module.sessionsHandlers,
@@ -675,6 +679,10 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...createLazyCoreHandlers({
     methods: ["sessions.files.list", "sessions.files.get"],
     loadHandlers: loadSessionsFilesHandlers,
+  }),
+  ...createLazyCoreHandlers({
+    methods: ["fs.dirs.list"],
+    loadHandlers: loadFsDirsHandlers,
   }),
 };
 

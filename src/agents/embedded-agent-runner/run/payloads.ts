@@ -89,6 +89,14 @@ const MUTATING_FAILURE_ERROR_WHILE_ACTION_PATTERN = new RegExp(
 );
 const DID_NOT_FAIL_PATTERN = /\b(?:did not|didn't)\s+fail\b/u;
 const NEGATED_FAILURE_PATTERN = /\b(?:no|not|without)\s+(?:failures?|errors?)\b/u;
+const FENCED_JSON_PATTERN = /^\s*```(?:json)?\s*([\s\S]*?)\s*```\s*$/iu;
+const INTERNAL_TOOL_ACTIONS = new Set([
+  "message",
+  "sessions_send",
+  "sessions_spawn",
+  "subagents",
+  "update_plan",
+]);
 
 function isRecoverableToolError(error: string | undefined): boolean {
   const errorLower = normalizeOptionalLowercaseString(error) ?? "";
@@ -114,6 +122,36 @@ function hasExplicitMutatingToolFailureAcknowledgement(text: string): boolean {
     MUTATING_FAILURE_FAILURE_THEN_ACTION_PATTERN.test(normalizedText) ||
     MUTATING_FAILURE_ERROR_WHILE_ACTION_PATTERN.test(normalizedText)
   );
+}
+
+function isRawInternalToolInvocationText(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return false;
+  }
+  const jsonText = FENCED_JSON_PATTERN.exec(trimmed)?.[1]?.trim() ?? trimmed;
+  if (!jsonText.startsWith("{") || !jsonText.endsWith("}")) {
+    return false;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    return false;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return false;
+  }
+  const record = parsed as Record<string, unknown>;
+  const action =
+    typeof record.action === "string"
+      ? record.action
+      : typeof record.name === "string"
+        ? record.name
+        : typeof record.tool === "string"
+          ? record.tool
+          : undefined;
+  return Boolean(action && INTERNAL_TOOL_ACTIONS.has(action));
 }
 
 function isVerboseToolDetailEnabled(level?: VerboseLevel): boolean {
@@ -849,6 +887,9 @@ export function buildEmbeddedRunPayloads(params: {
       replyToCurrent,
     } = parseReplyDirectives(text);
     if (!cleanedText && (!mediaUrls || mediaUrls.length === 0) && !audioAsVoice) {
+      continue;
+    }
+    if (cleanedText && isRawInternalToolInvocationText(cleanedText)) {
       continue;
     }
     replyItems.push({

@@ -771,7 +771,7 @@ describe("talk.speak handler", () => {
     const respond = vi.fn();
     await talkHandlers["talk.speak"]({
       req: { type: "req", id: "1", method: "talk.speak" },
-      params: { text: "Hello from talk mode." },
+      params: { text: "Hello from talk mode.", agentId: "rp" },
       client: null,
       isWebchatConnect: () => false,
       respond: respond as never,
@@ -782,11 +782,147 @@ describe("talk.speak handler", () => {
     expect(mocks.readConfigFileSnapshot).not.toHaveBeenCalled();
     expectRecordFields(mockCallArg(mocks.synthesizeSpeech), {
       text: "Hello from talk mode.",
+      agentId: "rp",
       disableFallback: true,
     });
     expectRespondOk(respond, {
       provider: "acme",
       audioBase64: Buffer.from([1, 2, 3]).toString("base64"),
+      outputFormat: "mp3",
+      mimeType: "audio/mpeg",
+      fileExtension: ".mp3",
+    });
+  });
+
+  it("infers the speaking agent from the client session subscription", async () => {
+    const runtimeConfig = createTalkConfig("env-acme-key");
+    const resolveTalkOverrides = vi.fn(({ params }: { params: Record<string, unknown> }) => {
+      expect(params.voiceId).toBeUndefined();
+      return {};
+    });
+    mocks.getRuntimeConfig.mockReturnValue(runtimeConfig);
+    mocks.getSpeechProvider.mockReturnValue({
+      id: "acme",
+      label: "Acme Speech",
+      resolveTalkConfig: ({
+        talkProviderConfig,
+      }: {
+        talkProviderConfig: Record<string, unknown>;
+      }) => talkProviderConfig,
+      resolveTalkOverrides,
+    });
+    mocks.synthesizeSpeech.mockResolvedValue({
+      success: true,
+      provider: "acme",
+      audioBuffer: Buffer.from([4, 5, 6]),
+      outputFormat: "mp3",
+      voiceCompatible: false,
+      fileExtension: ".mp3",
+    });
+
+    const respond = vi.fn();
+    await talkHandlers["talk.speak"]({
+      req: { type: "req", id: "1", method: "talk.speak" },
+      params: {
+        text: "Hello from Lexi.",
+        voiceId: "stub-default-voice",
+      },
+      client: { connId: "ios-1" } as never,
+      isWebchatConnect: () => false,
+      respond: respond as never,
+      context: {
+        getRuntimeConfig: () => runtimeConfig,
+        getSessionMessageSubscriptionKeys: () => new Set(["agent:main:main", "agent:rp:main"]),
+      } as never,
+    });
+
+    expect(resolveTalkOverrides).toHaveBeenCalledOnce();
+    expectRecordFields(mockCallArg(mocks.synthesizeSpeech), {
+      text: "Hello from Lexi.",
+      agentId: "rp",
+      disableFallback: true,
+    });
+    expectRespondOk(respond, {
+      provider: "acme",
+      audioBase64: Buffer.from([4, 5, 6]).toString("base64"),
+      outputFormat: "mp3",
+      mimeType: "audio/mpeg",
+      fileExtension: ".mp3",
+    });
+  });
+
+  it("falls back to the agent TTS config when Talk speech is not configured", async () => {
+    const runtimeConfig = {
+      agents: {
+        list: [
+          {
+            id: "rp",
+            tts: {
+              provider: "openai",
+              providers: {
+                openai: {
+                  apiKey: "env-openai-key",
+                  voice: "shimmer",
+                },
+              },
+            },
+          },
+        ],
+      },
+    } as OpenClawConfig;
+    const resolveTalkOverrides = vi.fn(({ params }: { params: Record<string, unknown> }) => {
+      expect(params.voiceId).toBe("shimmer");
+      return { voice: "shimmer" };
+    });
+    mocks.getRuntimeConfig.mockReturnValue(runtimeConfig);
+    mocks.resolveTtsConfig.mockReturnValue({
+      provider: "openai",
+      providerConfigs: {
+        openai: {
+          apiKey: "env-openai-key",
+          voice: "shimmer",
+        },
+      },
+      timeoutMs: 30_000,
+    });
+    mocks.getSpeechProvider.mockReturnValue({
+      id: "openai",
+      label: "OpenAI Speech",
+      resolveTalkOverrides,
+    });
+    mocks.synthesizeSpeech.mockResolvedValue({
+      success: true,
+      provider: "openai",
+      audioBuffer: Buffer.from([7, 8, 9]),
+      outputFormat: "mp3",
+      voiceCompatible: false,
+      fileExtension: ".mp3",
+    });
+
+    const respond = vi.fn();
+    await talkHandlers["talk.speak"]({
+      req: { type: "req", id: "1", method: "talk.speak" },
+      params: {
+        text: "Hello from Lexi RP.",
+        agentId: "rp",
+        voiceId: "shimmer",
+      },
+      client: null,
+      isWebchatConnect: () => false,
+      respond: respond as never,
+      context: { getRuntimeConfig: () => runtimeConfig } as never,
+    });
+
+    expect(mocks.resolveTtsConfig).toHaveBeenCalledWith(runtimeConfig, { agentId: "rp" });
+    expect(resolveTalkOverrides).toHaveBeenCalledOnce();
+    expectRecordFields(mockCallArg(mocks.synthesizeSpeech), {
+      text: "Hello from Lexi RP.",
+      agentId: "rp",
+      disableFallback: true,
+    });
+    expectRespondOk(respond, {
+      provider: "openai",
+      audioBase64: Buffer.from([7, 8, 9]).toString("base64"),
       outputFormat: "mp3",
       mimeType: "audio/mpeg",
       fileExtension: ".mp3",

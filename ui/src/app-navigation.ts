@@ -5,9 +5,34 @@ import { t } from "./i18n/index.ts";
 
 export type NavigationRouteId = RouteId;
 
+type SidebarSection = {
+  label: string;
+  routes: readonly NavigationRouteId[];
+};
+
 type NavigationItem = {
   [TRouteId in NavigationRouteId]: IconName;
 };
+
+export const SIDEBAR_SECTIONS = [
+  { label: "chat", routes: ["chat"] },
+  {
+    label: "control",
+    routes: [
+      "overview",
+      "activity",
+      "workboard",
+      "voice-room",
+      "worktrees",
+      "instances",
+      "sessions",
+      "usage",
+      "cron",
+    ],
+  },
+  { label: "agent", routes: ["agents", "skills", "skill-workshop", "nodes", "dreams"] },
+  { label: "settings", routes: ["config"] },
+] as const satisfies readonly SidebarSection[];
 
 // The sidebar shows a small user-customizable pinned set; every other nav route
 // lives in the collapsed "More" section. Chat is reachable through the session
@@ -16,11 +41,12 @@ export const SIDEBAR_NAV_ROUTES = [
   "overview",
   "activity",
   "workboard",
+  "voice-room",
+  "worktrees",
   "instances",
   "sessions",
   "usage",
   "cron",
-  "tasks",
   "agents",
   "skills",
   "skill-workshop",
@@ -70,24 +96,23 @@ export const SETTINGS_NAVIGATION_ROUTES = [
   "automation",
   "mcp",
   "infrastructure",
-  "worktrees",
   "ai-agents",
   "debug",
   "logs",
 ] as const satisfies readonly NavigationRouteId[];
 
 const NAVIGATION_ICONS: NavigationItem = {
-  agents: "bot",
+  agents: "folder",
   activity: "activity",
   overview: "barChart",
-  workboard: "kanban",
+  workboard: "folder",
+  "voice-room": "mic",
   worktrees: "folder",
   channels: "link",
   instances: "radio",
   sessions: "fileText",
   usage: "barChart",
   cron: "loader",
-  tasks: "loader",
   skills: "zap",
   "skill-workshop": "wrench",
   nodes: "monitor",
@@ -107,6 +132,16 @@ const NAVIGATION_ICONS: NavigationItem = {
 
 export function isSettingsNavigationRoute(routeId: NavigationRouteId): boolean {
   return (SETTINGS_NAVIGATION_ROUTES as readonly NavigationRouteId[]).includes(routeId);
+}
+
+export function isRouteInSidebarSection(
+  section: SidebarSection,
+  routeId: NavigationRouteId,
+): boolean {
+  if (section.label === "settings") {
+    return isSettingsNavigationRoute(routeId);
+  }
+  return section.routes.includes(routeId);
 }
 
 export function navigationIconForRoute(routeId: NavigationRouteId): IconName {
@@ -166,13 +201,13 @@ const NAVIGATION_COPY: Record<NavigationRouteId, { titleKey: string; subtitleKey
   activity: { titleKey: "tabs.activity", subtitleKey: "subtitles.activity" },
   overview: { titleKey: "tabs.overview", subtitleKey: "subtitles.overview" },
   workboard: { titleKey: "tabs.workboard", subtitleKey: "subtitles.workboard" },
+  "voice-room": { titleKey: "tabs.chat", subtitleKey: "subtitles.chat" },
   worktrees: { titleKey: "tabs.worktrees", subtitleKey: "subtitles.worktrees" },
   channels: { titleKey: "tabs.channels", subtitleKey: "subtitles.channels" },
   instances: { titleKey: "tabs.instances", subtitleKey: "subtitles.instances" },
   sessions: { titleKey: "tabs.sessions", subtitleKey: "subtitles.sessions" },
   usage: { titleKey: "tabs.usage", subtitleKey: "subtitles.usage" },
   cron: { titleKey: "tabs.cron", subtitleKey: "subtitles.cron" },
-  tasks: { titleKey: "tabs.tasks", subtitleKey: "subtitles.tasks" },
   skills: { titleKey: "tabs.skills", subtitleKey: "subtitles.skills" },
   "skill-workshop": {
     titleKey: "tabs.skillWorkshop",
@@ -197,9 +232,15 @@ const NAVIGATION_COPY: Record<NavigationRouteId, { titleKey: string; subtitleKey
 };
 
 export function titleForRoute(routeId: NavigationRouteId): string {
+  if (routeId === "voice-room") {
+    return "Voice Room";
+  }
   return t(NAVIGATION_COPY[routeId].titleKey);
 }
 
 export function subtitleForRoute(routeId: NavigationRouteId): string {
+  if (routeId === "voice-room") {
+    return "Two-agent realtime voice and text room.";
+  }
   return t(NAVIGATION_COPY[routeId].subtitleKey);
 }

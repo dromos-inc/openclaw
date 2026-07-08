@@ -133,6 +133,7 @@ function createLocalGatewayRequestContext(
       sessionEvents.delete(connId);
     },
     getSessionEventSubscriberConnIds: () => sessionEvents,
+    getSessionMessageSubscriptionKeys: () => new Set<string>(),
     registerToolEventRecipient: () => {},
     dedupe: new Map(),
     wizardSessions: new Map(),

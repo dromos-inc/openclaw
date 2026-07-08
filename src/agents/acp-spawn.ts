@@ -1061,6 +1061,48 @@ function resolveAcpSpawnRuntimeOptions(params: {
   return { ok: true, runtimeOptions };
 }
 
+function readConfiguredAgentDisplayName(agentConfig: unknown): string | undefined {
+  if (typeof agentConfig !== "object" || agentConfig === null) {
+    return undefined;
+  }
+  const { name } = agentConfig as { name?: unknown };
+  return normalizeOptionalString(name);
+}
+
+function buildAcpSpawnAgentContextPrompt(params: {
+  configuredAgentId: string;
+  backendAgentId: string;
+  agentName?: string;
+  cwd?: string;
+}): string {
+  const lines = [
+    "## OpenClaw ACP Agent Context",
+    `Configured OpenClaw agent id: ${params.configuredAgentId}`,
+  ];
+  if (params.agentName) {
+    lines.push(`Configured OpenClaw agent name: ${params.agentName}`);
+  }
+  if (params.backendAgentId !== params.configuredAgentId) {
+    lines.push(`ACP backend harness id: ${params.backendAgentId}`);
+  }
+  if (params.cwd) {
+    lines.push(`Managed workspace cwd: ${params.cwd}`);
+  }
+  lines.push(
+    "Follow the OpenClaw-managed workspace instructions and identity/context files available in this workspace, such as AGENTS.md, SOUL.md, IDENTITY.md, USER.md, and TOOLS.md when present.",
+  );
+  return lines.join("\n");
+}
+
+function buildAcpSpawnInitialMessage(params: { agentContextPrompt: string; task: string }): string {
+  return [
+    params.agentContextPrompt,
+    "Treat the context above as OpenClaw runtime context for this ACP session.",
+    "## Task",
+    params.task,
+  ].join("\n\n");
+}
+
 async function initializeAcpSpawnRuntime(params: {
   cfg: OpenClawConfig;
   sessionKey: string;
@@ -1449,6 +1491,18 @@ export async function spawnAcpDirect(
       error: summarizeError(error),
     });
   }
+  const configuredAgentId = targetAgentResult.configAgentId ?? targetAgentId;
+  const configuredAgentConfig = resolveAgentConfig(cfg, configuredAgentId);
+  const agentContextPrompt = buildAcpSpawnAgentContextPrompt({
+    configuredAgentId,
+    backendAgentId: targetAgentId,
+    agentName: readConfiguredAgentDisplayName(configuredAgentConfig),
+    cwd: runtimeCwd,
+  });
+  const initialMessage = buildAcpSpawnInitialMessage({
+    agentContextPrompt,
+    task: params.task,
+  });
 
   let preparedBinding: PreparedAcpThreadBinding | null = null;
   if (requestThreadBinding) {
@@ -1580,7 +1634,7 @@ export async function spawnAcpDirect(
     const response = await callGateway({
       method: "agent",
       params: {
-        message: params.task,
+        message: initialMessage,
         sessionKey,
         channel: deliveryPlan.channel,
         to: deliveryPlan.to,
@@ -1592,6 +1646,7 @@ export async function spawnAcpDirect(
         acpTurnSource: "manual_spawn",
         timeout: runTimeoutSeconds,
         label: params.label || undefined,
+        extraSystemPrompt: agentContextPrompt,
         ...(gatewayAttachments ? { attachments: gatewayAttachments } : {}),
       },
       timeoutMs: 10_000,

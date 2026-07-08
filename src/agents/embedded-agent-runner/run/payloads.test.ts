@@ -113,6 +113,14 @@ describe("buildEmbeddedRunPayloads tool-error warnings", () => {
     expectSinglePayloadText(payloads, "Done.");
   });
 
+  it("suppresses raw internal tool invocation JSON emitted as final text", () => {
+    expectNoPayloads({
+      assistantTexts: [
+        '```json\n{\n  "action": "sessions_spawn",\n  "task": "Role play with @lexi in the group chat.",\n  "runtime": "subagent"\n}\n```',
+      ],
+    });
+  });
+
   it("marks runtime-persisted final replies as transcript owned", () => {
     const payloads = buildPayloads({
       assistantTexts: ["Already persisted."],

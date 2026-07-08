@@ -12,6 +12,7 @@
 @import "./styles/logbook.css";
 @import "./styles/dreams.css";
 @import "./styles/workboard.css";
+@import "./styles/voice-room.css";
 @import "./styles/skill-workshop.css";
 @import "@create-markdown/preview/themes/system.css";
 

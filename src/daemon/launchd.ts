@@ -940,7 +940,11 @@ async function writeLaunchAgentPlist({
   description,
   stdout,
   warn,
-}: GatewayServiceInstallArgs): Promise<{ plistPath: string; stdoutPath: string }> {
+}: GatewayServiceInstallArgs): Promise<{
+  plistPath: string;
+  stdoutPath: string;
+  changed: boolean;
+}> {
   const { logDir, stdoutPath } = resolveGatewaySupervisorLogPaths(env, { platform: "darwin" });
   await ensureSecureDirectory(logDir);
 
@@ -983,9 +987,10 @@ async function writeLaunchAgentPlist({
     stderrPath: LAUNCH_AGENT_STDERR_PATH,
     environment: prepared.inlineEnvironment,
   });
+  const previousPlist = await fs.readFile(plistPath, "utf8").catch(() => undefined);
   await fs.writeFile(plistPath, plist, { encoding: "utf8", mode: LAUNCH_AGENT_PLIST_MODE });
   await fs.chmod(plistPath, LAUNCH_AGENT_PLIST_MODE).catch(() => undefined);
-  return { plistPath, stdoutPath };
+  return { plistPath, stdoutPath, changed: previousPlist !== plist };
 }
 
 export async function stageLaunchAgent({
@@ -1022,7 +1027,26 @@ async function activateLaunchAgent(params: { env: GatewayServiceEnv; plistPath: 
 export async function installLaunchAgent(
   args: GatewayServiceInstallArgs,
 ): Promise<{ plistPath: string }> {
-  const { plistPath, stdoutPath } = await writeLaunchAgentPlist(args);
+  const { plistPath, stdoutPath, changed } = await writeLaunchAgentPlist(args);
+  if (!changed) {
+    // Desired LaunchAgent definition already matches what's on disk. If the service
+    // is also already running under launchd, skip the bootout/bootstrap cycle below —
+    // it would needlessly kill a healthy gateway process just to reinstall an
+    // identical definition (e.g. a client retrying `install --force` after a false
+    // negative on its own "is the gateway up" check).
+    const runtime = await readLaunchAgentRuntime(args.env);
+    if (runtime.status === "running") {
+      writeFormattedLines(
+        args.stdout,
+        [
+          { label: "LaunchAgent unchanged; gateway already running", value: plistPath },
+          { label: "Logs", value: stdoutPath },
+        ],
+        { leadingBlankLine: true },
+      );
+      return { plistPath };
+    }
+  }
   await activateLaunchAgent({ env: args.env, plistPath });
   // `bootstrap` already loads RunAtLoad agents. Avoid `kickstart -k` here:
   // on slow macOS guests it SIGTERMs the freshly booted gateway and pushes the

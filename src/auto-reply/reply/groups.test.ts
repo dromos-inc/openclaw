@@ -47,6 +47,9 @@ describe("group runtime loading", () => {
     expect(groupChatContext).toContain("stay silent unless invited or correcting key facts");
     expect(groupChatContext).toContain("prefer delegating bounded side investigations early");
     expect(groupChatContext).toContain("Keep the critical path local");
+    expect(groupChatContext).toContain("For status or continuity questions");
+    expect(groupChatContext).toContain("Do not make internal tool availability");
+    expect(groupChatContext).toContain("memory index health");
     expect(groupChatContext).toContain('reply with exactly "NO_REPLY"');
     const toolOnlyContext = isolatedGroups.buildGroupChatContext({
       sessionCtx: { ChatType: "group", Provider: "discord" },

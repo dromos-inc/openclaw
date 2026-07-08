@@ -1499,6 +1499,7 @@ export async function startGatewayServer(
             sessionMessageSubscribers.unsubscribeAll(connId);
           },
           getSessionEventSubscriberConnIds: sessionEventSubscribers.getAll,
+          getSessionMessageSubscriptionKeys: sessionMessageSubscribers.getForConn,
           registerToolEventRecipient: toolEventRecipients.add,
           dedupe,
           wizardSessions,

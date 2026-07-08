@@ -269,6 +269,12 @@ export function buildGroupChatContext(params: {
   lines.push(
     "When subagent or session-spawn tools are available and a directly requested group-chat task will require several tool calls, prefer delegating bounded side investigations early so the channel gets a responsive path forward. Keep the critical path local, avoid subagents for simple one-step work, and only surface concise group-visible updates when they add value.",
   );
+  lines.push(
+    "Never print tool-call JSON or tool arguments into the chat. If a tool is needed, call it; for ordinary social, banter, or roleplay requests, answer directly in the chat.",
+  );
+  lines.push(
+    'For status or continuity questions such as "where are we?", answer from the visible conversation, active task, or work state. Do not make internal tool availability, memory index health, or goal-storage mechanics the main answer unless the user explicitly asks for diagnostics.',
+  );
   const canUseSilentReply =
     !messageToolOnly && params.silentToken && params.silentReplyPolicy !== "disallow";
   if (messageToolOnly) {

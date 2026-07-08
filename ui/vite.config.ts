@@ -287,6 +287,7 @@ export default function controlUiViteConfig(): UserConfig {
       chunkSizeWarningLimit: 1024,
     },
     server: {
+      allowedHosts: ["oc-voice-matts-macbook-air.dromos.ai"],
       host: true,
       port: 5173,
       strictPort: true,

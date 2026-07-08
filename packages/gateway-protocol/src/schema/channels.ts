@@ -31,6 +31,7 @@ export const TalkConfigParamsSchema = Type.Object(
 export const TalkSpeakParamsSchema = Type.Object(
   {
     text: NonEmptyString,
+    agentId: Type.Optional(Type.String()),
     voiceId: Type.Optional(Type.String()),
     modelId: Type.Optional(Type.String()),
     outputFormat: Type.Optional(Type.String()),

@@ -34,6 +34,38 @@ type NormalizeReplyOptions = {
   onSkip?: (reason: NormalizeReplySkipReason) => void;
 };
 
+const INTERNAL_ACTIONS = new Set([
+  "sessions_spawn",
+  "sessions_send",
+  "sessions_yield",
+  "create_goal",
+  "update_goal",
+]);
+
+function stripJsonCodeFence(text: string): string {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^```(?:json|javascript|js)?\s*\r?\n([\s\S]*?)\r?\n```$/i);
+  return match?.[1]?.trim() ?? trimmed;
+}
+
+function isInternalActionJsonText(text: string): boolean {
+  const stripped = stripJsonCodeFence(text);
+  if (!stripped.startsWith("{") || !stripped.endsWith("}")) {
+    return false;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripped);
+  } catch {
+    return false;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return false;
+  }
+  const action = (parsed as { action?: unknown }).action;
+  return typeof action === "string" && INTERNAL_ACTIONS.has(action);
+}
+
 export function normalizeReplyPayload(
   payload: ReplyPayload,
   opts: NormalizeReplyOptions = {},
@@ -82,6 +114,14 @@ export function normalizeReplyPayload(
   }
   if (text && !trimmed) {
     // Keep empty text when media exists so media-only replies still send.
+    text = "";
+  }
+
+  if (text && isInternalActionJsonText(text)) {
+    if (!hasContent("")) {
+      opts.onSkip?.("silent");
+      return null;
+    }
     text = "";
   }
 

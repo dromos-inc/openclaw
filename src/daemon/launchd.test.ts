@@ -829,6 +829,67 @@ describe("launchd install", () => {
     expect(installKickstartIndex).toBe(-1);
   });
 
+  it("skips bootout/bootstrap on reinstall when the LaunchAgent definition is unchanged and already running", async () => {
+    const env = createDefaultLaunchdEnv();
+    await installLaunchAgent({
+      env,
+      stdout: new PassThrough(),
+      programArguments: defaultProgramArguments,
+    });
+
+    state.launchctlCalls.length = 0;
+
+    // A caller (e.g. a client app that failed to detect an already-healthy gateway)
+    // reinstalling the exact same service definition must not disturb the running process.
+    await installLaunchAgent({
+      env,
+      stdout: new PassThrough(),
+      programArguments: defaultProgramArguments,
+    });
+
+    expect(state.launchctlCalls.some((c) => c[0] === "bootout")).toBe(false);
+    expect(state.launchctlCalls.some((c) => c[0] === "bootstrap")).toBe(false);
+  });
+
+  it("still reinstalls when the LaunchAgent definition changes even if the service is running", async () => {
+    const env = createDefaultLaunchdEnv();
+    await installLaunchAgent({
+      env,
+      stdout: new PassThrough(),
+      programArguments: defaultProgramArguments,
+    });
+
+    state.launchctlCalls.length = 0;
+
+    await installLaunchAgent({
+      env,
+      stdout: new PassThrough(),
+      programArguments: [...defaultProgramArguments, "--changed"],
+    });
+
+    expectLaunchctlEnableBootstrapOrder(env);
+  });
+
+  it("reinstalls when the definition is unchanged but the service is not actually running", async () => {
+    const env = createDefaultLaunchdEnv();
+    await installLaunchAgent({
+      env,
+      stdout: new PassThrough(),
+      programArguments: defaultProgramArguments,
+    });
+
+    state.launchctlCalls.length = 0;
+    state.serviceRunning = false;
+
+    await installLaunchAgent({
+      env,
+      stdout: new PassThrough(),
+      programArguments: defaultProgramArguments,
+    });
+
+    expectLaunchctlEnableBootstrapOrder(env);
+  });
+
   it("writes LaunchAgent environment to an owner-only env file when provided", async () => {
     const env = createDefaultLaunchdEnv();
     const tmpDir = "/Users/test/.openclaw/tmp";

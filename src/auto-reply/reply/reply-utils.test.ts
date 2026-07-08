@@ -295,6 +295,53 @@ describe("normalizeReplyPayload", () => {
     expect(expectNormalizedReply(result).text).toBe('{"action":"NO_REPLY","note":"example"}');
   });
 
+  it("suppresses leaked internal action JSON payloads", () => {
+    const reasons: string[] = [];
+    const result = normalizeReplyPayload(
+      {
+        text: JSON.stringify(
+          {
+            action: "sessions_spawn",
+            task: "Role play with @lexi in the group chat.",
+            label: "Role Play with Lexi",
+            runtime: "subagent",
+            model: "venice/venice-uncensored-1-2",
+            thinking: "off",
+            cwd: "/Users/matthew/.openclaw/workspace",
+            mode: "run",
+            cleanup: "delete",
+            sandbox: "inherit",
+            context: "isolated",
+            lightContext: true,
+          },
+          null,
+          2,
+        ),
+      },
+      { onSkip: (reason) => reasons.push(reason) },
+    );
+
+    expect(result).toBeNull();
+    expect(reasons).toEqual(["silent"]);
+  });
+
+  it("suppresses fenced leaked internal action JSON payloads", () => {
+    const reasons: string[] = [];
+    const result = normalizeReplyPayload(
+      {
+        text: [
+          "```json",
+          '{ "action": "sessions_spawn", "task": "Role play with @lexi here." }',
+          "```",
+        ].join("\n"),
+      },
+      { onSkip: (reason) => reasons.push(reason) },
+    );
+
+    expect(result).toBeNull();
+    expect(reasons).toEqual(["silent"]);
+  });
+
   it("strips NO_REPLY but keeps media payload", () => {
     const result = normalizeReplyPayload({
       text: "NO_REPLY",

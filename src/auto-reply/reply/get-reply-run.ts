@@ -620,6 +620,8 @@ export async function runPreparedReply(
     promptSessionCtx.ChatType === "group" || promptSessionCtx.ChatType === "channel";
   const isDirectChat = promptSessionCtx.ChatType === "direct" || promptSessionCtx.ChatType === "dm";
   const wasMentioned = ctx.WasMentioned === true;
+  const groupTurnRequiresReply =
+    isGroupChat && (wasMentioned || promptSessionCtx.InboundEventKind === "user_request");
   const { typingPolicy, suppressTyping } = resolveRunTypingPolicy({
     requestedPolicy: opts?.typingPolicy,
     suppressTyping: opts?.suppressTyping === true,
@@ -649,7 +651,7 @@ export async function runPreparedReply(
     ? buildGroupChatContext({
         sessionCtx: promptSessionCtx,
         sourceReplyDeliveryMode: sessionPromptSourceReplyDeliveryMode,
-        silentReplyPolicy: silentReplySettings.policy,
+        silentReplyPolicy: groupTurnRequiresReply ? "disallow" : silentReplySettings.policy,
         silentToken: SILENT_REPLY_TOKEN,
       })
     : "";
@@ -665,6 +667,7 @@ export async function runPreparedReply(
       silentReplyConversationType === "direct" &&
       silentReplySettings.policy === "allow") ||
     (isGroupChat &&
+      !groupTurnRequiresReply &&
       resolveGroupSilentReplyBehavior({
         sessionEntry,
         defaultActivation,

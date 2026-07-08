@@ -34,7 +34,11 @@ import type {
 } from "../../config/types.gateway.js";
 import type { OpenClawConfig, TtsConfig, TtsProviderConfigMap } from "../../config/types.js";
 import { resolveProviderRawConfig } from "../../plugin-sdk/provider-selection-runtime.js";
-import { canonicalizeRealtimeTranscriptionProviderId } from "../../realtime-transcription/provider-registry.js";
+import {
+  canonicalizeRealtimeTranscriptionProviderId,
+  listRealtimeTranscriptionProviders,
+} from "../../realtime-transcription/provider-registry.js";
+import { parseAgentSessionKey } from "../../routing/session-key.js";
 import {
   canonicalizeRealtimeVoiceProviderId,
   listRealtimeVoiceProviders,
@@ -54,14 +58,12 @@ import {
 import { ADMIN_SCOPE, TALK_SECRETS_SCOPE } from "../operator-scopes.js";
 import { resolveConfiguredSecretInputString } from "../resolve-configured-secret-input-string.js";
 import { formatForLog } from "../ws-log.js";
-import { inferSpeechMimeType } from "./speech-mime.js";
 import { talkClientHandlers } from "./talk-client.js";
 import { talkSessionHandlers } from "./talk-session.js";
 import {
   buildTalkRealtimeConfig,
   buildTalkTranscriptionConfig,
   configuredOrFalse,
-  listTalkTranscriptionProviders,
   resolveConfiguredRealtimeTranscriptionProvider,
 } from "./talk-shared.js";
 import type { GatewayRequestHandlers } from "./types.js";
@@ -167,12 +169,33 @@ function withTalkBaseTtsSpeakerSelectionCompat(
 
 function buildTalkTtsConfig(
   config: OpenClawConfig,
+  agentId?: string,
 ):
   | { cfg: OpenClawConfig; provider: string; providerConfig: TalkProviderConfig }
   | { error: string; reason: TalkSpeakReason } {
   const resolved = resolveActiveTalkProviderConfig(config.talk);
   const provider = canonicalizeSpeechProviderId(resolved?.provider, config);
   if (!resolved || !provider) {
+    if (agentId) {
+      const agentTtsConfig = resolveTtsConfig(config, { agentId });
+      const agentProvider = canonicalizeSpeechProviderId(agentTtsConfig.provider, config);
+      if (agentProvider) {
+        const speechProvider = getSpeechProvider(agentProvider, config);
+        if (!speechProvider) {
+          return {
+            error: `talk.speak unavailable: speech provider "${agentProvider}" does not support Talk mode`,
+            reason: "talk_provider_unsupported",
+          };
+        }
+        return {
+          provider: agentProvider,
+          providerConfig: withSpeakerSelectionFallbackCompat(
+            agentTtsConfig.providerConfigs[agentProvider] ?? {},
+          ),
+          cfg: config,
+        };
+      }
+    }
     return {
       error: "talk.speak unavailable: talk provider not configured",
       reason: "talk_unconfigured",
@@ -285,19 +308,12 @@ function buildTalkCatalog(config: OpenClawConfig) {
     transcription: {
       ready: transcriptionSelection.ready,
       ...(activeTranscriptionProvider ? { activeProvider: activeTranscriptionProvider } : {}),
-      providers: listTalkTranscriptionProviders(config, [
-        transcriptionConfig.provider,
-        ...Object.keys(transcriptionConfig.providers),
-      ]).map((provider) => {
+      providers: listRealtimeTranscriptionProviders(config).map((provider) => {
         const rawConfig = getVoiceProviderConfig({
           providerConfigs: transcriptionConfig.providers,
           provider,
           configuredProviderId:
-            activeTranscriptionProvider &&
-            normalizeOptionalLowercaseString(provider.id) ===
-              normalizeOptionalLowercaseString(activeTranscriptionProvider)
-              ? transcriptionConfig.provider
-              : undefined,
+            provider.id === activeTranscriptionProvider ? transcriptionConfig.provider : undefined,
         });
         const rawConfigWithModel =
           transcriptionConfig.model && rawConfig.model === undefined
@@ -425,20 +441,26 @@ function buildTalkSpeakOverrides(
   providerConfig: TalkProviderConfig,
   config: OpenClawConfig,
   params: TalkSpeakParams,
+  opts: { ignoreDefaultVoiceId?: boolean } = {},
 ): TtsDirectiveOverrides {
   const speechProvider = getSpeechProvider(provider, config);
   if (!speechProvider?.resolveTalkOverrides) {
     return { provider };
   }
   const resolvedSpeed = resolveTalkSpeed(params);
-  const resolvedVoiceId = resolveTalkVoiceId(
-    providerConfig,
-    normalizeOptionalString(params.voiceId),
-  );
+  const requestedVoiceId = normalizeOptionalString(params.voiceId);
+  const resolvedVoiceId =
+    opts.ignoreDefaultVoiceId && isDefaultTalkVoiceId(providerConfig, requestedVoiceId)
+      ? undefined
+      : resolveTalkVoiceId(providerConfig, requestedVoiceId);
+  const paramsWithoutVoiceId = { ...params };
+  if (resolvedVoiceId == null) {
+    delete paramsWithoutVoiceId.voiceId;
+  }
   const providerOverrides = speechProvider.resolveTalkOverrides({
     talkProviderConfig: providerConfig,
     params: {
-      ...params,
+      ...paramsWithoutVoiceId,
       ...(resolvedVoiceId == null ? {} : { voiceId: resolvedVoiceId }),
       ...(resolvedSpeed == null ? {} : { speed: resolvedSpeed }),
     },
@@ -452,6 +474,84 @@ function buildTalkSpeakOverrides(
       [provider]: providerOverrides,
     },
   };
+}
+
+function isDefaultTalkVoiceId(
+  providerConfig: TalkProviderConfig,
+  requested: string | undefined,
+): boolean {
+  const resolvedRequested = resolveTalkVoiceId(providerConfig, requested);
+  if (!resolvedRequested) {
+    return false;
+  }
+  const defaults = [
+    providerConfig.voiceId,
+    providerConfig.speakerVoiceId,
+    providerConfig.voice,
+    providerConfig.speakerVoice,
+  ];
+  return defaults.some((candidate) => {
+    const resolvedCandidate = resolveTalkVoiceId(
+      providerConfig,
+      normalizeOptionalString(candidate),
+    );
+    return (
+      resolvedCandidate !== undefined &&
+      normalizeLowercaseStringOrEmpty(resolvedCandidate) ===
+        normalizeLowercaseStringOrEmpty(resolvedRequested)
+    );
+  });
+}
+
+function inferTalkAgentIdFromClientSubscription(
+  context: {
+    getSessionMessageSubscriptionKeys?: (connId: string) => ReadonlySet<string>;
+  },
+  connId: string | undefined | null,
+): string | undefined {
+  const normalizedConnId = normalizeOptionalString(connId);
+  if (!normalizedConnId || !context.getSessionMessageSubscriptionKeys) {
+    return undefined;
+  }
+  const keys = Array.from(context.getSessionMessageSubscriptionKeys(normalizedConnId));
+  for (let index = keys.length - 1; index >= 0; index -= 1) {
+    const parsed = parseAgentSessionKey(keys[index]);
+    if (parsed?.agentId) {
+      return parsed.agentId;
+    }
+  }
+  return undefined;
+}
+
+function inferMimeType(
+  outputFormat: string | undefined,
+  fileExtension: string | undefined,
+): string | undefined {
+  const normalizedOutput = normalizeOptionalLowercaseString(outputFormat);
+  const normalizedExtension = normalizeOptionalLowercaseString(fileExtension);
+  if (
+    normalizedOutput === "mp3" ||
+    normalizedOutput?.startsWith("mp3_") ||
+    normalizedOutput?.endsWith("-mp3") ||
+    normalizedExtension === ".mp3"
+  ) {
+    return "audio/mpeg";
+  }
+  if (
+    normalizedOutput === "opus" ||
+    normalizedOutput?.startsWith("opus_") ||
+    normalizedExtension === ".opus" ||
+    normalizedExtension === ".ogg"
+  ) {
+    return "audio/ogg";
+  }
+  if (normalizedOutput?.endsWith("-wav") || normalizedExtension === ".wav") {
+    return "audio/wav";
+  }
+  if (normalizedOutput?.endsWith("-webm") || normalizedExtension === ".webm") {
+    return "audio/webm";
+  }
+  return undefined;
 }
 
 async function resolveTalkResponseFromConfig(params: {
@@ -757,7 +857,7 @@ export const talkHandlers: GatewayRequestHandlers = {
 
     respond(true, { config: configPayload }, undefined);
   },
-  "talk.speak": async ({ params, respond, context }) => {
+  "talk.speak": async ({ params, client, respond, context }) => {
     if (!validateTalkSpeakParams(params)) {
       respond(
         false,
@@ -795,21 +895,25 @@ export const talkHandlers: GatewayRequestHandlers = {
 
     try {
       const runtimeConfig = context.getRuntimeConfig();
-      const setup = buildTalkTtsConfig(runtimeConfig);
+      const explicitAgentId = normalizeOptionalString(typedParams.agentId);
+      const inferredAgentId =
+        explicitAgentId ?? inferTalkAgentIdFromClientSubscription(context, client?.connId);
+      const setup = buildTalkTtsConfig(runtimeConfig, inferredAgentId);
       if ("error" in setup) {
         respond(false, undefined, talkSpeakError(setup.reason, setup.error));
         return;
       }
-
       const overrides = buildTalkSpeakOverrides(
         setup.provider,
         setup.providerConfig,
         runtimeConfig,
         typedParams,
+        { ignoreDefaultVoiceId: inferredAgentId !== undefined && explicitAgentId === undefined },
       );
       const result = await synthesizeSpeech({
         text,
         cfg: setup.cfg,
+        agentId: inferredAgentId,
         overrides,
         disableFallback: true,
       });
@@ -845,7 +949,7 @@ export const talkHandlers: GatewayRequestHandlers = {
           provider: result.provider ?? setup.provider,
           outputFormat: result.outputFormat,
           voiceCompatible: result.voiceCompatible,
-          mimeType: inferSpeechMimeType(result.outputFormat, result.fileExtension),
+          mimeType: inferMimeType(result.outputFormat, result.fileExtension),
           fileExtension: result.fileExtension,
         },
         undefined,

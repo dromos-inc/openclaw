@@ -899,6 +899,13 @@ describe("spawnAcpDirect", () => {
     expect(agentCall?.params?.deliver).toBe(true);
     expect(agentCall?.params?.lane).toBe("subagent");
     expect(agentCall?.params?.acpTurnSource).toBe("manual_spawn");
+    expect(agentCall?.params?.message).toContain("## OpenClaw ACP Agent Context");
+    expect(agentCall?.params?.message).toContain("Configured OpenClaw agent id: codex");
+    expect(agentCall?.params?.message).toContain("## Task\n\nInvestigate flaky tests");
+    expect(agentCall?.params?.extraSystemPrompt).toContain("Configured OpenClaw agent id: codex");
+    expect(agentCall?.params?.extraSystemPrompt).toContain(
+      "Follow the OpenClaw-managed workspace instructions",
+    );
     const initInput = expectInitializeSessionFields({
       agent: "codex",
       mode: "persistent",
@@ -1364,6 +1371,7 @@ describe("spawnAcpDirect", () => {
         list: [
           {
             id: "reviewer",
+            name: "Code Reviewer",
             runtime: {
               type: "acp",
               acp: {
@@ -1394,6 +1402,17 @@ describe("spawnAcpDirect", () => {
     expectAcceptedSpawn(result);
     const initInput = expectInitializeSessionFields({ agent: "codex" });
     expect(initInput.sessionKey).toMatch(/^agent:codex:acp:/);
+    const agentCall = gatewayRequest("agent");
+    expect(agentCall?.params?.message).toContain("Configured OpenClaw agent id: reviewer");
+    expect(agentCall?.params?.message).toContain("Configured OpenClaw agent name: Code Reviewer");
+    expect(agentCall?.params?.message).toContain("ACP backend harness id: codex");
+    expect(agentCall?.params?.extraSystemPrompt).toContain(
+      "Configured OpenClaw agent id: reviewer",
+    );
+    expect(agentCall?.params?.extraSystemPrompt).toContain(
+      "Configured OpenClaw agent name: Code Reviewer",
+    );
+    expect(agentCall?.params?.extraSystemPrompt).toContain("ACP backend harness id: codex");
   });
 
   it("inherits subagent envelope fields onto ACP children", async () => {

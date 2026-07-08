@@ -67,6 +67,7 @@ function makeContextParams(
     unsubscribeSessionMessageEvents: vi.fn(),
     unsubscribeAllSessionEvents: vi.fn(),
     getSessionEventSubscriberConnIds: vi.fn(() => new Set<string>()),
+    getSessionMessageSubscriptionKeys: vi.fn(() => new Set<string>()),
     registerToolEventRecipient: vi.fn(),
     dedupe: new Map(),
     wizardSessions: new Map(),

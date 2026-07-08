@@ -220,6 +220,7 @@ import {
   ShutdownEventSchema,
   TickEventSchema,
 } from "./frames.js";
+import { FsDirEntrySchema, FsDirsListParamsSchema, FsDirsListResultSchema } from "./fs.js";
 import {
   ChatAbortedEventSchema,
   ChatAbortParamsSchema,
@@ -458,6 +459,9 @@ export const ProtocolSchemas = {
   SessionsCompactionGetResult: SessionsCompactionGetResultSchema,
   SessionsCompactionBranchResult: SessionsCompactionBranchResultSchema,
   SessionsCompactionRestoreResult: SessionsCompactionRestoreResultSchema,
+  FsDirEntry: FsDirEntrySchema,
+  FsDirsListParams: FsDirsListParamsSchema,
+  FsDirsListResult: FsDirsListResultSchema,
   SessionFileBrowserEntry: SessionFileBrowserEntrySchema,
   SessionFileBrowserResult: SessionFileBrowserResultSchema,
   SessionFileKind: SessionFileKindSchema,
