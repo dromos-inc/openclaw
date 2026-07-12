@@ -983,7 +983,10 @@ describe("renderWorkboard", () => {
     description!.dispatchEvent(new InputEvent("input", { bubbles: true }));
     inputs[3]!.value = "#3b82f6";
     inputs[3]!.dispatchEvent(new InputEvent("input", { bubbles: true }));
-    container.querySelector<HTMLButtonElement>(".workboard-board-draft .btn.primary")?.click();
+    await nextFrame();
+    container
+      .querySelector<HTMLFormElement>(".workboard-board-draft")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await vi.waitFor(() => {
       expect(request).toHaveBeenCalledWith("workboard.boards.upsert", {
         id: "client-work",
@@ -2911,7 +2914,7 @@ describe("renderWorkboard", () => {
 
     const draft = container.querySelector<HTMLElement>(".workboard-draft");
     const agentSelect = [...(draft?.querySelectorAll<HTMLElement>(".workboard-select") ?? [])].at(
-      2,
+      3,
     );
     const optionLabels = [
       ...(agentSelect?.querySelectorAll<HTMLButtonElement>(".workboard-select__option") ?? []),
@@ -3405,7 +3408,7 @@ describe("renderWorkboard", () => {
       ...(container
         .querySelector(".workboard-draft")
         ?.querySelectorAll<HTMLElement>(".workboard-select") ?? []),
-    ].at(1);
+    ].at(2);
     priority
       ?.querySelectorAll<HTMLButtonElement>(".workboard-select__option")
       .item(2)
@@ -3440,7 +3443,7 @@ describe("renderWorkboard", () => {
         ...(container
           .querySelector(".workboard-draft")
           ?.querySelectorAll<HTMLElement>(".workboard-select__value") ?? []),
-      ].at(1)?.textContent,
+      ].at(2)?.textContent,
     ).toBe("High");
   });
 
@@ -3648,7 +3651,7 @@ describe("renderWorkboard", () => {
       ...(container
         .querySelector(".workboard-draft")
         ?.querySelectorAll<HTMLElement>(".workboard-select") ?? []),
-    ].at(3);
+    ].at(4);
     expect(sessionSelect?.querySelector(".workboard-select__value")?.textContent).toBe(
       "agent:main:archived-session",
     );
@@ -3692,7 +3695,7 @@ describe("renderWorkboard", () => {
       ...(container
         .querySelector(".workboard-draft")
         ?.querySelectorAll<HTMLElement>(".workboard-select") ?? []),
-    ].at(3);
+    ].at(4);
     const labels = [...(sessionOptions?.querySelectorAll(".workboard-select__option") ?? [])].map(
       (option) => option.textContent?.trim(),
     );
