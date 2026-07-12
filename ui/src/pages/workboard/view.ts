@@ -12,7 +12,10 @@ import { formatDateMs, formatDateTimeMs } from "../../lib/format.ts";
 import {
   addWorkboardCardComment,
   archiveWorkboardCard,
+  browseBoardFolders,
   configureWorkboardPolling,
+  createWorkboardBoard,
+  deleteWorkboardBoard,
   deleteWorkboardCard,
   dispatchWorkboard,
   filterWorkboardCardsForPreset,
@@ -22,15 +25,18 @@ import {
   getWorkboardState,
   moveWorkboardCard,
   refreshWorkboard,
+  resetBoardDraftState,
   saveWorkboardCardDraft,
   startWorkboardCard,
   stopWorkboardCard,
   summarizeWorkboardHealth,
+  workboardCardBoardId,
   workboardCardMatchesHealthKey,
   workboardHasActiveWrites,
   workboardMutationsReady,
   WORKBOARD_PRIORITIES,
   type WorkboardAutoRefreshIntervalMs,
+  type WorkboardBoard,
   type WorkboardDependencyState,
   type WorkboardExecutionEngine,
   type WorkboardExecutionMode,
@@ -82,6 +88,9 @@ type WorkboardProps = {
 const workboardCardModalTitleId = "workboard-card-modal-title";
 const workboardCardModalDescriptionId = "workboard-card-modal-description";
 const workboardCardModalId = "workboard-card-modal";
+const workboardBoardModalTitleId = "workboard-board-modal-title";
+const workboardBoardModalDescriptionId = "workboard-board-modal-description";
+const workboardBoardModalId = "workboard-board-modal";
 const workboardCardDetailDrawerId = "workboard-card-detail-drawer";
 const workboardCardDetailTitleId = "workboard-card-detail-title";
 const workboardCardDetailDescriptionId = "workboard-card-detail-description";
@@ -572,6 +581,17 @@ function matchesFilter(
   ]
     .filter((value): value is string => typeof value === "string")
     .some((value) => value.toLowerCase().includes(query));
+}
+
+function boardLabel(boardId: string, boards: readonly { id: string; name?: string }[]): string {
+  if (boardId === "default") {
+    return t("workboard.defaultBoard");
+  }
+  return boards.find((board) => board.id === boardId)?.name ?? boardId;
+}
+
+function matchesBoardFilter(card: WorkboardCard, boardFilter: WorkboardUiState["boardFilter"]) {
+  return boardFilter === "all" || workboardCardBoardId(card) === boardFilter;
 }
 
 function nextPosition(cards: readonly WorkboardCard[], status: WorkboardStatus): number {
@@ -1400,6 +1420,7 @@ function resetDraft(state: WorkboardUiState) {
   state.draftLabels = "";
   state.draftAgentId = "";
   state.draftSessionKey = "";
+  state.draftBoardId = state.boardFilter === "all" ? "default" : state.boardFilter;
   state.draftTemplateId = "";
   state.draftCommentBody = "";
   if (resolveStaleEdit) {
@@ -1412,6 +1433,42 @@ function openCreateModal(state: WorkboardUiState) {
   state.draftOpen = true;
 }
 
+function resetBoardDraft(state: WorkboardUiState) {
+  resetBoardDraftState(state);
+}
+
+function openBoardModal(state: WorkboardUiState) {
+  resetBoardDraft(state);
+  state.boardDraftOpen = true;
+}
+
+function openBoardEditModal(state: WorkboardUiState, board: WorkboardBoard) {
+  resetBoardDraft(state);
+  state.boardDraftOpen = true;
+  state.boardDraftEditingId = board.id;
+  state.boardDraftName = board.name ?? "";
+  state.boardDraftId = board.id;
+  state.boardDraftDescription = board.description ?? "";
+  state.boardDraftIcon = board.icon ?? "";
+  state.boardDraftColor = board.color ?? "";
+  const workspace = board.defaultWorkspace;
+  if (workspace) {
+    state.boardDraftWorkspaceKind = workspace.kind;
+    state.boardDraftWorkspacePath = workspace.path ?? "";
+    state.boardDraftWorkspaceBranch = workspace.branch ?? "";
+  }
+  const orchestration = board.orchestration;
+  if (orchestration) {
+    state.boardDraftAutoDecompose = orchestration.autoDecompose ?? false;
+    state.boardDraftAutoDecomposePerDispatch =
+      orchestration.autoDecomposePerDispatch != null
+        ? String(orchestration.autoDecomposePerDispatch)
+        : "";
+    state.boardDraftDefaultAssignee = orchestration.defaultAssignee ?? "";
+    state.boardDraftOrchestratorProfile = orchestration.orchestratorProfile ?? "";
+  }
+}
+
 function openEditModal(state: WorkboardUiState, card: WorkboardCard) {
   state.draftOpen = true;
   state.editingCardId = card.id;
@@ -1422,8 +1479,429 @@ function openEditModal(state: WorkboardUiState, card: WorkboardCard) {
   state.draftLabels = card.labels.join(", ");
   state.draftAgentId = card.agentId ?? "";
   state.draftSessionKey = card.sessionKey ?? "";
+  state.draftBoardId = workboardCardBoardId(card);
   state.draftTemplateId = card.metadata?.templateId ?? "";
   state.draftCommentBody = "";
+}
+
+function renderBoardFolderPicker(props: WorkboardProps, state: WorkboardUiState) {
+  const browse = (path?: string) =>
+    void browseBoardFolders({
+      host: props.host,
+      client: props.client,
+      path,
+      requestUpdate: props.onRequestUpdate,
+    });
+  return html`
+    <div
+      class="workboard-folder-picker"
+      role="group"
+      aria-label=${t("workboard.folderPickerTitle")}
+    >
+      <div class="workboard-folder-picker__path">
+        ${state.boardDraftPickerPath || t("workboard.folderPickerLoading")}
+      </div>
+      ${state.boardDraftPickerError
+        ? html`<div class="workboard-folder-picker__error">${state.boardDraftPickerError}</div>`
+        : nothing}
+      <div class="workboard-folder-picker__list">
+        ${state.boardDraftPickerParent
+          ? html`
+              <button
+                class="btn btn--xs workboard-folder-picker__entry"
+                type="button"
+                ?disabled=${state.boardDraftPickerLoading}
+                @click=${() => browse(state.boardDraftPickerParent ?? undefined)}
+              >
+                ${icons.folder} ..
+              </button>
+            `
+          : nothing}
+        ${state.boardDraftPickerEntries.map(
+          (entry) => html`
+            <button
+              class="btn btn--xs workboard-folder-picker__entry"
+              type="button"
+              ?disabled=${state.boardDraftPickerLoading}
+              @click=${() => browse(entry.path)}
+            >
+              ${icons.folder} ${entry.name}
+            </button>
+          `,
+        )}
+        ${!state.boardDraftPickerLoading && state.boardDraftPickerEntries.length === 0
+          ? html`<div class="workboard-folder-picker__empty">
+              ${t("workboard.folderPickerEmpty")}
+            </div>`
+          : nothing}
+      </div>
+      <div class="workboard-modal__actions">
+        <button
+          class="btn primary"
+          type="button"
+          ?disabled=${state.boardDraftPickerLoading || !state.boardDraftPickerPath}
+          @click=${() => {
+            state.boardDraftWorkspacePath = state.boardDraftPickerPath;
+            state.boardDraftPickerOpen = false;
+            props.onRequestUpdate?.();
+          }}
+        >
+          ${t("workboard.useThisFolder")}
+        </button>
+        <button
+          class="btn"
+          type="button"
+          @click=${() => {
+            state.boardDraftPickerOpen = false;
+            props.onRequestUpdate?.();
+          }}
+        >
+          ${t("common.cancel")}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderBoardWorkspaceSection(props: WorkboardProps, state: WorkboardUiState) {
+  const kind = state.boardDraftWorkspaceKind;
+  const workspaceOptions: WorkboardSelectOption<WorkboardUiState["boardDraftWorkspaceKind"]>[] = [
+    { value: "", label: t("workboard.workspaceNone") },
+    { value: "scratch", label: t("workboard.workspaceScratch") },
+    { value: "dir", label: t("workboard.workspaceDir") },
+    { value: "worktree", label: t("workboard.workspaceWorktree") },
+  ];
+  const showPath = kind === "dir" || kind === "worktree";
+  return html`
+    ${renderWorkboardSelect({
+      value: kind,
+      options: workspaceOptions,
+      label: t("workboard.fieldDefaultWorkspace"),
+      onChange: (value) => {
+        state.boardDraftWorkspaceKind = value;
+      },
+      requestUpdate: props.onRequestUpdate,
+    })}
+    ${showPath
+      ? html`
+          <label class="workboard-field workboard-field--wide">
+            <span>${t("workboard.fieldWorkspaceFolder")}</span>
+            <div class="workboard-folder-input">
+              <input
+                class="input"
+                placeholder=${t("workboard.workspaceFolderPlaceholder")}
+                .value=${state.boardDraftWorkspacePath}
+                @input=${(event: InputEvent) => {
+                  state.boardDraftWorkspacePath = (event.currentTarget as HTMLInputElement).value;
+                  props.onRequestUpdate?.();
+                }}
+              />
+              <button
+                class="btn"
+                type="button"
+                @click=${() => {
+                  state.boardDraftPickerOpen = true;
+                  void browseBoardFolders({
+                    host: props.host,
+                    client: props.client,
+                    path: state.boardDraftWorkspacePath.trim() || undefined,
+                    requestUpdate: props.onRequestUpdate,
+                  });
+                  props.onRequestUpdate?.();
+                }}
+              >
+                ${t("workboard.browseFolder")}
+              </button>
+            </div>
+          </label>
+          ${state.boardDraftPickerOpen ? renderBoardFolderPicker(props, state) : nothing}
+        `
+      : nothing}
+    ${kind === "worktree"
+      ? html`
+          <label class="workboard-field">
+            <span>${t("workboard.fieldWorkspaceBranch")}</span>
+            <input
+              class="input"
+              .value=${state.boardDraftWorkspaceBranch}
+              @input=${(event: InputEvent) => {
+                state.boardDraftWorkspaceBranch = (event.currentTarget as HTMLInputElement).value;
+                props.onRequestUpdate?.();
+              }}
+            />
+          </label>
+        `
+      : nothing}
+  `;
+}
+
+function renderBoardOrchestrationSection(props: WorkboardProps, state: WorkboardUiState) {
+  const assigneeAgents = buildAssignableAgentOptions(
+    props.agentsList,
+    state.boardDraftDefaultAssignee,
+  );
+  const assigneeOptions: WorkboardSelectOption[] = [
+    { value: "", label: t("workboard.orchestrationNoAssignee") },
+    ...assigneeAgents.map((agent) => ({ value: agent.id, label: agent.label })),
+  ];
+  return html`
+    <div class="workboard-field workboard-field--wide">
+      <label class="workboard-checkbox">
+        <input
+          type="checkbox"
+          .checked=${state.boardDraftAutoDecompose}
+          @change=${(event: Event) => {
+            state.boardDraftAutoDecompose = (event.currentTarget as HTMLInputElement).checked;
+            props.onRequestUpdate?.();
+          }}
+        />
+        <span>${t("workboard.fieldAutoDecompose")}</span>
+      </label>
+    </div>
+    <label class="workboard-field">
+      <span>${t("workboard.fieldAutoDecomposePerDispatch")}</span>
+      <input
+        class="input"
+        type="number"
+        min="1"
+        max="20"
+        ?disabled=${!state.boardDraftAutoDecompose}
+        .value=${state.boardDraftAutoDecomposePerDispatch}
+        @input=${(event: InputEvent) => {
+          state.boardDraftAutoDecomposePerDispatch = (
+            event.currentTarget as HTMLInputElement
+          ).value;
+          props.onRequestUpdate?.();
+        }}
+      />
+    </label>
+    ${renderWorkboardSelect({
+      value: state.boardDraftDefaultAssignee,
+      options: assigneeOptions,
+      label: t("workboard.fieldDefaultAssignee"),
+      onChange: (value) => {
+        state.boardDraftDefaultAssignee = value;
+      },
+      requestUpdate: props.onRequestUpdate,
+    })}
+    <label class="workboard-field">
+      <span>${t("workboard.fieldOrchestratorProfile")}</span>
+      <input
+        class="input"
+        .value=${state.boardDraftOrchestratorProfile}
+        @input=${(event: InputEvent) => {
+          state.boardDraftOrchestratorProfile = (event.currentTarget as HTMLInputElement).value;
+          props.onRequestUpdate?.();
+        }}
+      />
+    </label>
+  `;
+}
+
+function renderBoardModal(props: WorkboardProps) {
+  const state = getWorkboardState(props.host);
+  if (!state.boardDraftOpen) {
+    return nothing;
+  }
+  const editing = state.boardDraftEditingId !== null;
+  const canDelete = editing && state.boardDraftEditingId !== "default";
+  const boardActionsBusy =
+    !canMutate(props) || state.boardDraftSaving || state.boardDraftDeleting || state.dispatching;
+  return html`
+    <div
+      class="workboard-modal"
+      role="presentation"
+      @click=${(event: MouseEvent) => {
+        if (event.target === event.currentTarget && !state.boardDraftSaving) {
+          resetBoardDraft(state);
+          props.onRequestUpdate?.();
+        }
+      }}
+    >
+      <form
+        id=${workboardBoardModalId}
+        class="workboard-board-draft"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby=${workboardBoardModalTitleId}
+        aria-describedby=${workboardBoardModalDescriptionId}
+        tabindex="-1"
+        ${ref((element) => syncWorkboardDialog(element, "[data-workboard-autofocus='true']"))}
+        @keydown=${(event: KeyboardEvent) =>
+          handleWorkboardDialogKeydown(event, props, () => {
+            if (!state.boardDraftSaving) {
+              resetBoardDraft(state);
+            }
+          })}
+        @submit=${(event: SubmitEvent) => {
+          event.preventDefault();
+          if (boardActionsBusy || !state.boardDraftName.trim()) {
+            return;
+          }
+          void createWorkboardBoard({
+            host: props.host,
+            client: props.client,
+            name: state.boardDraftName,
+            id: state.boardDraftId,
+            description: state.boardDraftDescription,
+            icon: state.boardDraftIcon,
+            color: state.boardDraftColor,
+            requestUpdate: props.onRequestUpdate,
+          });
+        }}
+      >
+        <div class="workboard-modal__header">
+          <div>
+            <h2 id=${workboardBoardModalTitleId}>
+              ${editing ? t("workboard.editBoard") : t("workboard.newBoard")}
+            </h2>
+            <p id=${workboardBoardModalDescriptionId}>
+              ${editing ? t("workboard.editBoardHelp") : t("workboard.newBoardHelp")}
+            </p>
+          </div>
+          <openclaw-tooltip .content=${t("common.cancel")}>
+            <button
+              class="btn btn--icon workboard-card__icon"
+              type="button"
+              aria-label=${t("common.cancel")}
+              ?disabled=${state.boardDraftSaving}
+              @click=${() => {
+                resetBoardDraft(state);
+                props.onRequestUpdate?.();
+              }}
+            >
+              ${icons.x}
+            </button>
+          </openclaw-tooltip>
+        </div>
+        <div class="workboard-board-draft__body">
+          <label class="workboard-field workboard-field--wide">
+            <span>${t("workboard.fieldBoardName")}</span>
+            <input
+              class="input"
+              data-workboard-autofocus="true"
+              .value=${state.boardDraftName}
+              @input=${(event: InputEvent) => {
+                state.boardDraftName = (event.currentTarget as HTMLInputElement).value;
+                props.onRequestUpdate?.();
+              }}
+            />
+          </label>
+          <label class="workboard-field">
+            <span>${t("workboard.fieldBoardId")}</span>
+            <input
+              class="input"
+              .value=${state.boardDraftId}
+              ?disabled=${editing}
+              @input=${(event: InputEvent) => {
+                state.boardDraftId = (event.currentTarget as HTMLInputElement).value;
+                props.onRequestUpdate?.();
+              }}
+            />
+          </label>
+          <label class="workboard-field">
+            <span>${t("workboard.fieldBoardIcon")}</span>
+            <input
+              class="input"
+              maxlength="40"
+              .value=${state.boardDraftIcon}
+              @input=${(event: InputEvent) => {
+                state.boardDraftIcon = (event.currentTarget as HTMLInputElement).value;
+                props.onRequestUpdate?.();
+              }}
+            />
+          </label>
+          <label class="workboard-field workboard-field--wide">
+            <span>${t("workboard.fieldBoardDescription")}</span>
+            <textarea
+              class="input workboard-board-draft__description"
+              .value=${state.boardDraftDescription}
+              @input=${(event: InputEvent) => {
+                state.boardDraftDescription = (event.currentTarget as HTMLTextAreaElement).value;
+                props.onRequestUpdate?.();
+              }}
+            ></textarea>
+          </label>
+          <label class="workboard-field workboard-field--color">
+            <span>${t("workboard.fieldBoardColor")}</span>
+            <input
+              class="input"
+              type="color"
+              .value=${state.boardDraftColor || "#8b8f9c"}
+              @input=${(event: InputEvent) => {
+                state.boardDraftColor = (event.currentTarget as HTMLInputElement).value;
+                props.onRequestUpdate?.();
+              }}
+            />
+          </label>
+          <div class="workboard-board-draft__section workboard-field--wide">
+            <h3 class="workboard-board-draft__section-title">
+              ${t("workboard.sectionDefaultWorkspace")}
+            </h3>
+            ${renderBoardWorkspaceSection(props, state)}
+          </div>
+          <div class="workboard-board-draft__section workboard-field--wide">
+            <h3 class="workboard-board-draft__section-title">
+              ${t("workboard.sectionOrchestration")}
+            </h3>
+            ${renderBoardOrchestrationSection(props, state)}
+          </div>
+        </div>
+        ${editing && state.error
+          ? html`<p class="workboard-board-draft__error" role="alert">${state.error}</p>`
+          : nothing}
+        <div class="workboard-modal__actions workboard-modal__actions--split">
+          ${canDelete
+            ? html`
+                <button
+                  class="btn btn--danger workboard-board-draft__delete"
+                  type="button"
+                  ?disabled=${boardActionsBusy}
+                  @click=${() => {
+                    if (!state.boardDraftConfirmDelete) {
+                      // First click arms the confirm; second click performs the delete.
+                      state.boardDraftConfirmDelete = true;
+                      props.onRequestUpdate?.();
+                      return;
+                    }
+                    void deleteWorkboardBoard({
+                      host: props.host,
+                      client: props.client,
+                      requestUpdate: props.onRequestUpdate,
+                    });
+                  }}
+                >
+                  ${state.boardDraftDeleting
+                    ? t("common.deleting")
+                    : state.boardDraftConfirmDelete
+                      ? t("workboard.confirmDeleteBoard")
+                      : t("workboard.deleteBoard")}
+                </button>
+              `
+            : nothing}
+          <span class="workboard-modal__actions-spacer"></span>
+          <button
+            class="btn"
+            type="button"
+            ?disabled=${state.boardDraftSaving || state.boardDraftDeleting}
+            @click=${() => {
+              resetBoardDraft(state);
+              props.onRequestUpdate?.();
+            }}
+          >
+            ${t("common.cancel")}
+          </button>
+          <button class="btn primary" ?disabled=${boardActionsBusy || !state.boardDraftName.trim()}>
+            ${state.boardDraftSaving
+              ? t("common.saving")
+              : editing
+                ? t("common.save")
+                : t("common.create")}
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
 }
 
 function applyTemplate(state: WorkboardUiState, templateId: WorkboardTemplateId) {
@@ -1458,6 +1936,15 @@ function renderCardModal(props: WorkboardProps) {
     ...sessions.map((session) => ({
       value: session.key,
       label: session.displayName ?? session.label ?? session.key,
+    })),
+  ];
+  const cardBoards = state.boards.filter((board) => !board.archivedAt && board.id !== "default");
+  const boardOptions: WorkboardSelectOption[] = [
+    { value: "default", label: t("workboard.defaultBoard") },
+    ...cardBoards.map((board) => ({
+      value: board.id,
+      label: boardLabel(board.id, cardBoards),
+      ...(board.description ? { description: board.description } : {}),
     })),
   ];
   if (!state.draftOpen) {
@@ -1579,6 +2066,15 @@ function renderCardModal(props: WorkboardProps) {
             </label>
           </div>
           <div class="workboard-draft__meta">
+            ${renderWorkboardSelect({
+              value: state.draftBoardId || "default",
+              options: boardOptions,
+              label: t("workboard.fieldBoard"),
+              onChange: (value) => {
+                state.draftBoardId = value;
+              },
+              requestUpdate: props.onRequestUpdate,
+            })}
             ${renderWorkboardSelect({
               value: state.draftStatus,
               options: statusOptions,
@@ -2609,9 +3105,24 @@ export function renderWorkboard(props: WorkboardProps) {
 
   const agentOptions = buildAgentFilterOptions(props.agentsList, state.cards);
   state.agentFilter = normalizeActiveAgentFilter(agentOptions, state.agentFilter);
+  const customBoards = state.boards.filter((board) => !board.archivedAt && board.id !== "default");
+  const activeBoardIds = new Set(["default", ...customBoards.map((board) => board.id)]);
+  if (state.boardFilter !== "all" && !activeBoardIds.has(state.boardFilter)) {
+    state.boardFilter = "all";
+  }
+  const boardOptions: Array<WorkboardSelectOption<WorkboardUiState["boardFilter"]>> = [
+    { value: "all", label: t("workboard.allBoards") },
+    { value: "default", label: t("workboard.defaultBoard") },
+    ...customBoards.map((board) => ({
+      value: board.id,
+      label: boardLabel(board.id, customBoards),
+      ...(board.description ? { description: board.description } : {}),
+    })),
+  ];
   const applyNonViewFilters = (cards: readonly WorkboardCard[]) =>
     cards
       .filter((card) => state.showArchived || !card.metadata?.archivedAt)
+      .filter((card) => matchesBoardFilter(card, state.boardFilter))
       .filter((card) => matchesAgentFilter(card, props.agentsList, state.agentFilter))
       .filter((card) =>
         matchesFilter(card, { query: state.query, priority: state.priorityFilter }),
@@ -2650,6 +3161,7 @@ export function renderWorkboard(props: WorkboardProps) {
   const activeFiltering =
     state.viewPreset !== "all" ||
     state.query.trim() !== "" ||
+    state.boardFilter !== "all" ||
     state.priorityFilter !== "all" ||
     state.agentFilter !== "all" ||
     archivedCardsHidden;
@@ -2685,7 +3197,8 @@ export function renderWorkboard(props: WorkboardProps) {
     }
     return option;
   });
-  const dialogOpen = state.draftOpen || Boolean(getVisibleDetailCard(state));
+  const dialogOpen =
+    state.draftOpen || state.boardDraftOpen || Boolean(getVisibleDetailCard(state));
 
   return html`
     <section class="workboard" @pointerdown=${closeWorkboardSelectMenusOnOutsidePointer}>
@@ -2703,6 +3216,65 @@ export function renderWorkboard(props: WorkboardProps) {
                 props.onRequestUpdate?.();
               }}
             />
+            ${renderWorkboardSelect({
+              value: state.boardFilter,
+              options: boardOptions,
+              label: t("workboard.boardFilter"),
+              onChange: (value) => {
+                state.boardFilter = value;
+                state.draftBoardId = value === "all" ? "default" : value;
+              },
+              requestUpdate: props.onRequestUpdate,
+              className: "workboard-select--toolbar workboard-select--toolbar-board",
+              showLabel: false,
+            })}
+            <openclaw-tooltip .content=${t("workboard.addBoard")}>
+              <button
+                class="btn btn--icon workboard-board-add"
+                type="button"
+                aria-label=${t("workboard.addBoard")}
+                aria-haspopup="dialog"
+                aria-expanded=${state.boardDraftOpen ? "true" : "false"}
+                aria-controls=${workboardBoardModalId}
+                ?disabled=${!writable}
+                @click=${(event: MouseEvent) => {
+                  rememberWorkboardReturnFocus(event.currentTarget);
+                  openBoardModal(state);
+                  props.onRequestUpdate?.();
+                }}
+              >
+                ${icons.plus}
+              </button>
+            </openclaw-tooltip>
+            ${state.boardFilter !== "all"
+              ? html`
+                  <openclaw-tooltip .content=${t("workboard.editBoard")}>
+                    <button
+                      class="btn btn--icon workboard-board-edit"
+                      type="button"
+                      aria-label=${t("workboard.editBoard")}
+                      aria-haspopup="dialog"
+                      aria-controls=${workboardBoardModalId}
+                      ?disabled=${!writable}
+                      @click=${(event: MouseEvent) => {
+                        rememberWorkboardReturnFocus(event.currentTarget);
+                        // Synthesized "default" board may not be in the list; fall back to a stub.
+                        const board =
+                          state.boards.find((entry) => entry.id === state.boardFilter) ??
+                          ({
+                            id: state.boardFilter,
+                            createdAt: 0,
+                            updatedAt: 0,
+                          } satisfies WorkboardBoard);
+                        openBoardEditModal(state, board);
+                        props.onRequestUpdate?.();
+                      }}
+                    >
+                      ${icons.edit}
+                    </button>
+                  </openclaw-tooltip>
+                `
+              : nothing}
             ${renderWorkboardSelect({
               value: state.viewPreset,
               options: viewOptions,
@@ -2902,7 +3474,7 @@ export function renderWorkboard(props: WorkboardProps) {
               </div>
             `}
       </div>
-      ${renderCardModal(props)} ${renderCardDetailsPanel(props)}
+      ${renderBoardModal(props)} ${renderCardModal(props)} ${renderCardDetailsPanel(props)}
     </section>
   `;
 }

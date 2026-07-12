@@ -26,6 +26,30 @@ export type GatewayThinkingLevelOption = {
   label: string;
 };
 
+/** Sanitized TTS speaker metadata exposed to UI clients. */
+export type GatewayAgentTts = {
+  model?: string;
+  modelId?: string;
+  outputFormat?: string;
+  responseFormat?: string;
+  speakerVoice?: string;
+  speakerVoiceId?: string;
+  speed?: number;
+  stability?: number;
+  similarity?: number;
+  similarityBoost?: number;
+  style?: number;
+  speakerBoost?: boolean;
+  useSpeakerBoost?: boolean;
+  voice?: string;
+  voiceId?: string;
+  latencyTier?: number;
+  language?: string;
+  languageCode?: string;
+  normalize?: string;
+  applyTextNormalization?: string;
+};
+
 /** Common agent row shape used by session list responses. */
 export type GatewayAgentRow = {
   id: string;
@@ -38,6 +62,7 @@ export type GatewayAgentRow = {
   thinkingLevels?: GatewayThinkingLevelOption[];
   thinkingOptions?: string[];
   thinkingDefault?: string;
+  tts?: GatewayAgentTts;
 };
 
 /** Generic base for paged session-list responses. */

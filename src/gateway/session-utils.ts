@@ -93,6 +93,7 @@ import {
   resolveAvatarMime,
 } from "../shared/avatar-policy.js";
 import { resolveNonNegativeNumber } from "../shared/number-coercion.js";
+import { resolveEffectiveTtsConfig } from "../tts/tts-config.js";
 import { normalizeSessionDeliveryFields } from "../utils/delivery-context.shared.js";
 import type { ModelCostConfig } from "../utils/usage-format.js";
 import { estimateUsageCost, resolveModelCostConfig } from "../utils/usage-format.js";
@@ -1288,6 +1289,7 @@ export function listAgentsForGateway(
     const meta = configuredById.get(id);
     const model = resolveGatewayAgentModel(cfg, id);
     const resolvedModel = resolveDefaultModelForAgent({ cfg, agentId: id });
+    const tts = resolveGatewayAgentTts(cfg, id);
     const thinkingLevels = listThinkingLevelOptions(
       resolvedModel.provider,
       resolvedModel.model,
@@ -1321,11 +1323,83 @@ export function listAgentsForGateway(
           agentId: id,
           modelCatalog,
         }),
+        ...(tts ? { tts } : {}),
       },
       model ? { model } : {},
     );
   });
   return { defaultId, mainKey, scope, agents };
+}
+
+function resolveGatewayAgentTts(cfg: OpenClawConfig, agentId: string): GatewayAgentRow["tts"] {
+  const ttsConfig = resolveEffectiveTtsConfig(cfg, { agentId });
+  const provider = normalizeOptionalString(ttsConfig.provider);
+  const providerConfig =
+    provider && typeof ttsConfig.providers === "object" && ttsConfig.providers !== null
+      ? (ttsConfig.providers as Record<string, unknown>)[provider]
+      : undefined;
+  const record =
+    providerConfig && typeof providerConfig === "object"
+      ? (providerConfig as Record<string, unknown>)
+      : {};
+  const model = normalizeOptionalString(record.model);
+  const modelId = normalizeOptionalString(record.modelId);
+  const outputFormat = normalizeOptionalString(record.outputFormat);
+  const responseFormat = normalizeOptionalString(record.responseFormat);
+  const speakerVoice = normalizeOptionalString(record.speakerVoice);
+  const speakerVoiceId = normalizeOptionalString(record.speakerVoiceId);
+  const speed =
+    typeof record.speed === "number" && Number.isFinite(record.speed) ? record.speed : undefined;
+  const stability =
+    typeof record.stability === "number" && Number.isFinite(record.stability)
+      ? record.stability
+      : undefined;
+  const similarity =
+    typeof record.similarity === "number" && Number.isFinite(record.similarity)
+      ? record.similarity
+      : undefined;
+  const similarityBoost =
+    typeof record.similarityBoost === "number" && Number.isFinite(record.similarityBoost)
+      ? record.similarityBoost
+      : undefined;
+  const style =
+    typeof record.style === "number" && Number.isFinite(record.style) ? record.style : undefined;
+  const speakerBoost = typeof record.speakerBoost === "boolean" ? record.speakerBoost : undefined;
+  const useSpeakerBoost =
+    typeof record.useSpeakerBoost === "boolean" ? record.useSpeakerBoost : undefined;
+  const voice = normalizeOptionalString(record.voice);
+  const voiceId = normalizeOptionalString(record.voiceId);
+  const latencyTier =
+    typeof record.latencyTier === "number" && Number.isFinite(record.latencyTier)
+      ? record.latencyTier
+      : undefined;
+  const language = normalizeOptionalString(record.language);
+  const languageCode = normalizeOptionalString(record.languageCode);
+  const normalize = normalizeOptionalString(record.normalize);
+  const applyTextNormalization = normalizeOptionalString(record.applyTextNormalization);
+  const result = {
+    ...(model ? { model } : {}),
+    ...(modelId ? { modelId } : {}),
+    ...(outputFormat ? { outputFormat } : {}),
+    ...(responseFormat ? { responseFormat } : {}),
+    ...(speakerVoice ? { speakerVoice } : {}),
+    ...(speakerVoiceId ? { speakerVoiceId } : {}),
+    ...(speed !== undefined ? { speed } : {}),
+    ...(stability !== undefined ? { stability } : {}),
+    ...(similarity !== undefined ? { similarity } : {}),
+    ...(similarityBoost !== undefined ? { similarityBoost } : {}),
+    ...(style !== undefined ? { style } : {}),
+    ...(speakerBoost !== undefined ? { speakerBoost } : {}),
+    ...(useSpeakerBoost !== undefined ? { useSpeakerBoost } : {}),
+    ...(voice ? { voice } : {}),
+    ...(voiceId ? { voiceId } : {}),
+    ...(latencyTier !== undefined ? { latencyTier } : {}),
+    ...(language ? { language } : {}),
+    ...(languageCode ? { languageCode } : {}),
+    ...(normalize ? { normalize } : {}),
+    ...(applyTextNormalization ? { applyTextNormalization } : {}),
+  };
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function buildGatewaySessionStoreScanTargets(params: {
@@ -2083,13 +2157,14 @@ export function buildGatewaySessionRow(params: {
     sessionKey: key,
   });
   const acpMeta = readAcpSessionMeta({ sessionKey: acpSessionKey });
+  const isAcpRuntimeRow = acpMeta != null || isAcpSessionKey(key) || isAcpSessionKey(acpSessionKey);
   const agentRuntime = resolveModelAgentRuntimeMetadata({
     cfg,
     agentId: sessionAgentId,
     provider: rowModelProvider,
     model: rowModel,
     sessionKey: acpSessionKey,
-    acpRuntime: acpMeta != null,
+    acpRuntime: isAcpRuntimeRow,
     acpBackend: acpMeta?.backend,
   });
   const estimatedCostUsd = lightweight
@@ -2232,8 +2307,8 @@ export function buildGatewaySessionRow(params: {
       cfg.messages?.responseUsage,
       channel,
     ),
-    modelProvider: rowModelProvider,
-    model: rowModel,
+    modelProvider: isAcpRuntimeRow ? undefined : rowModelProvider,
+    model: isAcpRuntimeRow ? undefined : rowModel,
     agentRuntime,
     contextTokens,
     contextBudgetStatus: entry?.contextBudgetStatus,

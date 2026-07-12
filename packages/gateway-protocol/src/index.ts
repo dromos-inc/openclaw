@@ -12,12 +12,6 @@ import { Compile, type Validator as TypeBoxValidator } from "typebox/compile";
 import {
   type AgentEvent,
   AgentEventSchema,
-  type AuditEvent,
-  AuditEventSchema,
-  type AuditListParams,
-  AuditListParamsSchema,
-  type AuditListResult,
-  AuditListResultSchema,
   type AgentIdentityParams,
   AgentIdentityParamsSchema,
   type AgentIdentityResult,
@@ -76,6 +70,12 @@ import {
   type ArtifactsListResult,
   type ArtifactSummary,
   ArtifactSummarySchema,
+  type AuditEvent,
+  AuditEventSchema,
+  type AuditListParams,
+  AuditListParamsSchema,
+  type AuditListResult,
+  AuditListResultSchema,
   type AgentsListParams,
   AgentsListParamsSchema,
   type AgentsListResult,
@@ -142,8 +142,6 @@ import {
   TalkSpeakResultSchema,
   type TtsSpeakParams,
   TtsSpeakParamsSchema,
-  type TtsSpeakResult,
-  TtsSpeakResultSchema,
   type ChannelsStatusParams,
   ChannelsStatusParamsSchema,
   type ChannelsStatusResult,
@@ -227,13 +225,14 @@ import {
   ExecApprovalsGetParamsSchema,
   type ExecApprovalsNodeGetParams,
   ExecApprovalsNodeGetParamsSchema,
-  type ExecApprovalsNodeSnapshot,
-  ExecApprovalsNodeSnapshotSchema,
   type ExecApprovalsNodeSetParams,
   ExecApprovalsNodeSetParamsSchema,
   type ExecApprovalsSetParams,
   ExecApprovalsSetParamsSchema,
   type ExecApprovalsSnapshot,
+  ExecApprovalsSnapshotSchema,
+  type ExecApprovalsNodeSnapshot,
+  ExecApprovalsNodeSnapshotSchema,
   type ExecApprovalGetParams,
   ExecApprovalGetParamsSchema,
   type ExecApprovalRequestParams,
@@ -276,7 +275,6 @@ import {
   errorShape,
   type GatewayFrame,
   GatewayFrameSchema,
-  GATEWAY_SERVER_CAPS,
   type HelloOk,
   HelloOkSchema,
   type LogsTailParams,
@@ -398,6 +396,13 @@ import {
   SessionsCompactionListParamsSchema,
   type SessionsCompactionRestoreParams,
   SessionsCompactionRestoreParamsSchema,
+  type FsDirEntry,
+  FsDirEntrySchema,
+  type FsDirsListParams,
+  FsDirsListParamsSchema,
+  GATEWAY_SERVER_CAPS,
+  type FsDirsListResult,
+  FsDirsListResultSchema,
   type SessionFileBrowserEntry,
   SessionFileBrowserEntrySchema,
   type SessionFileBrowserResult,
@@ -409,12 +414,8 @@ import {
   type SessionFileRelevance,
   SessionFileRelevanceSchema,
   type SessionOperationEvent,
-  type SessionWorktreeInfo,
-  SessionWorktreeInfoSchema,
   type SessionsCreateParams,
   SessionsCreateParamsSchema,
-  type SessionsCreateResult,
-  SessionsCreateResultSchema,
   type SessionsDeleteParams,
   SessionsDeleteParamsSchema,
   type SessionsDescribeParams,
@@ -466,12 +467,6 @@ import {
   type SkillsBinsParams,
   SkillsBinsParamsSchema,
   type SkillsBinsResult,
-  type SkillsDetailParams,
-  SkillsDetailParamsSchema,
-  type SkillsDetailResult,
-  SkillsDetailResultSchema,
-  type SkillsInstallParams,
-  SkillsInstallParamsSchema,
   type SkillsCuratorActionParams,
   SkillsCuratorActionParamsSchema,
   type SkillsCuratorActionResult,
@@ -480,6 +475,12 @@ import {
   SkillsCuratorStatusParamsSchema,
   type SkillsCuratorStatusResult,
   SkillsCuratorStatusResultSchema,
+  type SkillsDetailParams,
+  SkillsDetailParamsSchema,
+  type SkillsDetailResult,
+  SkillsDetailResultSchema,
+  type SkillsInstallParams,
+  SkillsInstallParamsSchema,
   type SkillsProposalActionParams,
   SkillsProposalActionParamsSchema,
   type SkillsProposalApplyResult,
@@ -671,10 +672,10 @@ export const validateMessageActionParams =
 export const validateSendParams = lazyCompile(SendParamsSchema);
 export const validatePollParams = lazyCompile<PollParams>(PollParamsSchema);
 export const validateAgentParams = lazyCompile(AgentParamsSchema);
-export const validateAuditListParams = lazyCompile<AuditListParams>(AuditListParamsSchema);
 export const validateAgentIdentityParams =
   lazyCompile<AgentIdentityParams>(AgentIdentityParamsSchema);
 export const validateAgentWaitParams = lazyCompile<AgentWaitParams>(AgentWaitParamsSchema);
+export const validateAuditListParams = lazyCompile<AuditListParams>(AuditListParamsSchema);
 export const validateWakeParams = lazyCompile<WakeParams>(WakeParamsSchema);
 export const validateAgentsListParams = lazyCompile<AgentsListParams>(AgentsListParamsSchema);
 export const validateWorktreesListParams =
@@ -701,11 +702,11 @@ export const validateAgentsFilesGetParams = lazyCompile<AgentsFilesGetParams>(
 export const validateAgentsFilesSetParams = lazyCompile<AgentsFilesSetParams>(
   AgentsFilesSetParamsSchema,
 );
-export const validateAgentsWorkspaceListParams = lazyCompile<AgentsWorkspaceListParams>(
-  AgentsWorkspaceListParamsSchema,
-);
 export const validateAgentsWorkspaceGetParams = lazyCompile<AgentsWorkspaceGetParams>(
   AgentsWorkspaceGetParamsSchema,
+);
+export const validateAgentsWorkspaceListParams = lazyCompile<AgentsWorkspaceListParams>(
+  AgentsWorkspaceListParamsSchema,
 );
 export const validateArtifactsListParams =
   lazyCompile<ArtifactsListParams>(ArtifactsListParamsSchema);
@@ -788,6 +789,7 @@ export const validateSessionsDescribeParams = lazyCompile<SessionsDescribeParams
 export const validateSessionsResolveParams = lazyCompile<SessionsResolveParams>(
   SessionsResolveParamsSchema,
 );
+export const validateFsDirsListParams = lazyCompile<FsDirsListParams>(FsDirsListParamsSchema);
 export const validateSessionsFilesListParams = lazyCompile<SessionsFilesListParams>(
   SessionsFilesListParamsSchema,
 );
@@ -923,7 +925,6 @@ export const validateTalkSessionOkResult =
 export const validateTalkSpeakParams = lazyCompile<TalkSpeakParams>(TalkSpeakParamsSchema);
 export const validateTalkSpeakResult = lazyCompile<TalkSpeakResult>(TalkSpeakResultSchema);
 export const validateTtsSpeakParams = lazyCompile<TtsSpeakParams>(TtsSpeakParamsSchema);
-export const validateTtsSpeakResult = lazyCompile<TtsSpeakResult>(TtsSpeakResultSchema);
 export const validateChannelsStatusParams = lazyCompile<ChannelsStatusParams>(
   ChannelsStatusParamsSchema,
 );
@@ -954,13 +955,13 @@ export const validateSkillsUploadCommitParams = lazyCompile<SkillsUploadCommitPa
 );
 export const validateSkillsUpdateParams = lazyCompile<SkillsUpdateParams>(SkillsUpdateParamsSchema);
 export const validateSkillsSearchParams = lazyCompile<SkillsSearchParams>(SkillsSearchParamsSchema);
-export const validateSkillsDetailParams = lazyCompile<SkillsDetailParams>(SkillsDetailParamsSchema);
-export const validateSkillsCuratorStatusParams = lazyCompile<SkillsCuratorStatusParams>(
-  SkillsCuratorStatusParamsSchema,
-);
 export const validateSkillsCuratorActionParams = lazyCompile<SkillsCuratorActionParams>(
   SkillsCuratorActionParamsSchema,
 );
+export const validateSkillsCuratorStatusParams = lazyCompile<SkillsCuratorStatusParams>(
+  SkillsCuratorStatusParamsSchema,
+);
+export const validateSkillsDetailParams = lazyCompile<SkillsDetailParams>(SkillsDetailParamsSchema);
 export const validateSkillsProposalsListParams = lazyCompile<SkillsProposalsListParams>(
   SkillsProposalsListParamsSchema,
 );
@@ -1157,7 +1158,6 @@ export function formatValidationErrors(errors: ValidationError[] | null | undefi
 // protocol surface changes.
 export {
   ConnectParamsSchema,
-  GATEWAY_SERVER_CAPS,
   HelloOkSchema,
   RequestFrameSchema,
   ResponseFrameSchema,
@@ -1211,6 +1211,9 @@ export {
   SessionsPreviewParamsSchema,
   SessionsDescribeParamsSchema,
   SessionsResolveParamsSchema,
+  FsDirEntrySchema,
+  FsDirsListParamsSchema,
+  FsDirsListResultSchema,
   SessionFileBrowserEntrySchema,
   SessionFileBrowserResultSchema,
   SessionFileEntrySchema,
@@ -1224,9 +1227,7 @@ export {
   SessionsCompactionGetParamsSchema,
   SessionsCompactionBranchParamsSchema,
   SessionsCompactionRestoreParamsSchema,
-  SessionWorktreeInfoSchema,
   SessionsCreateParamsSchema,
-  SessionsCreateResultSchema,
   SessionsSendParamsSchema,
   SessionsAbortParamsSchema,
   SessionsPatchParamsSchema,
@@ -1299,7 +1300,6 @@ export {
   TalkSpeakParamsSchema,
   TalkSpeakResultSchema,
   TtsSpeakParamsSchema,
-  TtsSpeakResultSchema,
   ChannelsStatusParamsSchema,
   ChannelsStatusResultSchema,
   ChannelsStartParamsSchema,
@@ -1323,10 +1323,10 @@ export {
   AgentsFilesSetResultSchema,
   AgentsWorkspaceEntrySchema,
   AgentsWorkspaceFileSchema,
-  AgentsWorkspaceListParamsSchema,
-  AgentsWorkspaceListResultSchema,
   AgentsWorkspaceGetParamsSchema,
   AgentsWorkspaceGetResultSchema,
+  AgentsWorkspaceListParamsSchema,
+  AgentsWorkspaceListResultSchema,
   AgentsListParamsSchema,
   AgentsListResultSchema,
   CommandsListParamsSchema,
@@ -1337,14 +1337,14 @@ export {
   PluginsUiDescriptorsResultSchema,
   ModelsListParamsSchema,
   SkillsStatusParamsSchema,
-  ToolsCatalogParamsSchema,
-  ToolsEffectiveParamsSchema,
-  ToolsInvokeParamsSchema,
-  SkillsInstallParamsSchema,
   SkillsCuratorActionParamsSchema,
   SkillsCuratorActionResultSchema,
   SkillsCuratorStatusParamsSchema,
   SkillsCuratorStatusResultSchema,
+  ToolsCatalogParamsSchema,
+  ToolsEffectiveParamsSchema,
+  ToolsInvokeParamsSchema,
+  SkillsInstallParamsSchema,
   SkillsSearchParamsSchema,
   SkillsSearchResultSchema,
   SkillsDetailParamsSchema,
@@ -1402,6 +1402,8 @@ export {
   ExecApprovalGetParamsSchema,
   ExecApprovalRequestParamsSchema,
   ExecApprovalResolveParamsSchema,
+  ExecApprovalsSnapshotSchema,
+  ExecApprovalsNodeSnapshotSchema,
   ChatHistoryParamsSchema,
   ChatMetadataParamsSchema,
   ChatSendParamsSchema,
@@ -1425,6 +1427,7 @@ export {
   PROTOCOL_VERSION,
   ErrorCodes,
   errorShape,
+  GATEWAY_SERVER_CAPS,
 };
 
 // Type exports mirror the schema exports for downstream TypeScript consumers.
@@ -1500,9 +1503,8 @@ export type {
   TalkSessionOkResult,
   TalkSpeakParams,
   TalkSpeakResult,
-  TtsSpeakParams,
-  TtsSpeakResult,
   TalkModeParams,
+  TtsSpeakParams,
   ChannelsStatusParams,
   ChannelsStatusResult,
   ChannelsStartParams,
@@ -1526,10 +1528,13 @@ export type {
   AgentsFilesSetResult,
   AgentsWorkspaceEntry,
   AgentsWorkspaceFile,
-  AgentsWorkspaceListParams,
-  AgentsWorkspaceListResult,
   AgentsWorkspaceGetParams,
   AgentsWorkspaceGetResult,
+  AgentsWorkspaceListParams,
+  AgentsWorkspaceListResult,
+  FsDirEntry,
+  FsDirsListParams,
+  FsDirsListResult,
   SessionFileBrowserEntry,
   SessionFileBrowserResult,
   SessionFileEntry,
@@ -1546,6 +1551,9 @@ export type {
   ArtifactsGetResult,
   ArtifactsDownloadParams,
   ArtifactsDownloadResult,
+  AuditEvent,
+  AuditListParams,
+  AuditListResult,
   AgentsListParams,
   AgentsListResult,
   ChatMetadataParams,
@@ -1620,17 +1628,12 @@ export type {
   SessionsDescribeParams,
   SessionsResolveParams,
   SessionOperationEvent,
-  SessionWorktreeInfo,
-  SessionsCreateResult,
   SessionsPatchParams,
   SessionsPatchResult,
   SessionsResetParams,
   SessionsDeleteParams,
   SessionsCompactParams,
   SessionsUsageParams,
-  AuditEvent,
-  AuditListParams,
-  AuditListResult,
   TaskSummary,
   TasksListParams,
   TasksListResult,
@@ -1651,9 +1654,9 @@ export type {
   CronRunsParams,
   CronRunLogEntry,
   ExecApprovalsGetParams,
-  ExecApprovalsNodeSnapshot,
   ExecApprovalsSetParams,
   ExecApprovalsSnapshot,
+  ExecApprovalsNodeSnapshot,
   ExecApprovalGetParams,
   ExecApprovalRequestParams,
   ExecApprovalResolveParams,

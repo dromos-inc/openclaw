@@ -57,6 +57,13 @@ describe("AgentsListResultSchema", () => {
           ],
           thinkingOptions: ["off", "xhigh"],
           thinkingDefault: "xhigh",
+          tts: {
+            speakerVoice: "marin",
+            modelId: "tts-1",
+            outputFormat: "mp3_44100_128",
+            speed: 1.1,
+            latencyTier: 2,
+          },
         },
       ],
     };

@@ -214,6 +214,8 @@ export type WorkboardWorkspace = {
   kind: "scratch" | "dir" | "worktree";
   path?: string;
   branch?: string;
+  sourcePath?: string;
+  sourceBranch?: string;
 };
 
 export type WorkboardAutomation = {
@@ -230,6 +232,26 @@ export type WorkboardAutomation = {
   createdCardIds?: string[];
   dispatchCount?: number;
   lastDispatchAt?: number;
+};
+
+export type WorkboardOrchestrationSettings = {
+  autoDecompose?: boolean;
+  autoDecomposePerDispatch?: number;
+  defaultAssignee?: string;
+  orchestratorProfile?: string;
+};
+
+export type WorkboardBoard = {
+  id: string;
+  name?: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  defaultWorkspace?: WorkboardWorkspace;
+  orchestration?: WorkboardOrchestrationSettings;
+  createdAt: number;
+  updatedAt: number;
+  archivedAt?: number;
 };
 
 export type WorkboardMetadata = {
@@ -370,12 +392,14 @@ export type WorkboardUiState = {
   mutationReadiness: "ready" | "canonical_reload_required" | "stale_edit_draft";
   error: string | null;
   cards: WorkboardCard[];
+  boards: WorkboardBoard[];
   statuses: readonly WorkboardStatus[];
   tasksByCardId: Map<string, WorkboardTaskSummary>;
   missingTaskIds: Set<string>;
   lastDispatchSummary: WorkboardDispatchSummary | null;
   dispatching: boolean;
   query: string;
+  boardFilter: "all" | string;
   priorityFilter: "all" | WorkboardPriority;
   agentFilter: string;
   viewPreset: WorkboardViewPresetId;
@@ -407,8 +431,35 @@ export type WorkboardUiState = {
   draftLabels: string;
   draftAgentId: string;
   draftSessionKey: string;
+  draftBoardId: string;
   draftTemplateId: WorkboardTemplateId | "";
   draftCommentBody: string;
+  boardDraftOpen: boolean;
+  boardDraftSaving: boolean;
+  // Non-null when the modal is editing an existing board rather than creating one.
+  boardDraftEditingId: string | null;
+  boardDraftDeleting: boolean;
+  boardDraftConfirmDelete: boolean;
+  boardDraftName: string;
+  boardDraftId: string;
+  boardDraftDescription: string;
+  boardDraftIcon: string;
+  boardDraftColor: string;
+  boardDraftWorkspaceKind: "" | "scratch" | "dir" | "worktree";
+  boardDraftWorkspacePath: string;
+  boardDraftWorkspaceBranch: string;
+  boardDraftAutoDecompose: boolean;
+  boardDraftAutoDecomposePerDispatch: string;
+  boardDraftDefaultAssignee: string;
+  boardDraftOrchestratorProfile: string;
+  // Home-rooted folder-picker overlay state for choosing the default workspace.
+  boardDraftPickerOpen: boolean;
+  boardDraftPickerRoot: string;
+  boardDraftPickerPath: string;
+  boardDraftPickerParent: string | null;
+  boardDraftPickerEntries: { name: string; path: string }[];
+  boardDraftPickerLoading: boolean;
+  boardDraftPickerError: string | null;
   detailCardId: string | null;
   detailCommentBody: string;
   busyCardIds: Set<string>;
@@ -750,12 +801,14 @@ function createDefaultState(): WorkboardUiState {
     mutationReadiness: "ready",
     error: null,
     cards: [],
+    boards: [],
     statuses: WORKBOARD_STATUSES,
     tasksByCardId: new Map(),
     missingTaskIds: new Set(),
     lastDispatchSummary: null,
     dispatching: false,
     query: "",
+    boardFilter: "all",
     priorityFilter: "all",
     agentFilter: "all",
     viewPreset: "all",
@@ -787,8 +840,33 @@ function createDefaultState(): WorkboardUiState {
     draftLabels: "",
     draftAgentId: "",
     draftSessionKey: "",
+    draftBoardId: "default",
     draftTemplateId: "",
     draftCommentBody: "",
+    boardDraftOpen: false,
+    boardDraftSaving: false,
+    boardDraftEditingId: null,
+    boardDraftDeleting: false,
+    boardDraftConfirmDelete: false,
+    boardDraftName: "",
+    boardDraftId: "",
+    boardDraftDescription: "",
+    boardDraftIcon: "",
+    boardDraftColor: "",
+    boardDraftWorkspaceKind: "",
+    boardDraftWorkspacePath: "",
+    boardDraftWorkspaceBranch: "",
+    boardDraftAutoDecompose: false,
+    boardDraftAutoDecomposePerDispatch: "",
+    boardDraftDefaultAssignee: "",
+    boardDraftOrchestratorProfile: "",
+    boardDraftPickerOpen: false,
+    boardDraftPickerRoot: "",
+    boardDraftPickerPath: "",
+    boardDraftPickerParent: null,
+    boardDraftPickerEntries: [],
+    boardDraftPickerLoading: false,
+    boardDraftPickerError: null,
     detailCardId: null,
     detailCommentBody: "",
     busyCardIds: new Set(),
@@ -1489,6 +1567,115 @@ function normalizeCardsPayload(payload: unknown): {
   return { cards, statuses: statuses.length ? statuses : WORKBOARD_STATUSES };
 }
 
+function normalizeWorkspaceValue(value: unknown): WorkboardWorkspace | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const kind = value.kind;
+  if (kind !== "scratch" && kind !== "dir" && kind !== "worktree") {
+    return undefined;
+  }
+  const str = (key: string) =>
+    typeof value[key] === "string" && (value[key] as string).trim()
+      ? (value[key] as string)
+      : undefined;
+  const path = str("path");
+  const branch = str("branch");
+  const sourcePath = str("sourcePath");
+  const sourceBranch = str("sourceBranch");
+  return {
+    kind,
+    ...(path ? { path } : {}),
+    ...(branch ? { branch } : {}),
+    ...(sourcePath ? { sourcePath } : {}),
+    ...(sourceBranch ? { sourceBranch } : {}),
+  };
+}
+
+function normalizeOrchestrationValue(value: unknown): WorkboardOrchestrationSettings | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const autoDecompose = value.autoDecompose === true ? true : undefined;
+  const perDispatch =
+    typeof value.autoDecomposePerDispatch === "number" && value.autoDecomposePerDispatch > 0
+      ? value.autoDecomposePerDispatch
+      : undefined;
+  const defaultAssignee =
+    typeof value.defaultAssignee === "string" && value.defaultAssignee.trim()
+      ? value.defaultAssignee
+      : undefined;
+  const orchestratorProfile =
+    typeof value.orchestratorProfile === "string" && value.orchestratorProfile.trim()
+      ? value.orchestratorProfile
+      : undefined;
+  if (
+    autoDecompose === undefined &&
+    perDispatch === undefined &&
+    defaultAssignee === undefined &&
+    orchestratorProfile === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    ...(autoDecompose !== undefined ? { autoDecompose } : {}),
+    ...(perDispatch !== undefined ? { autoDecomposePerDispatch: perDispatch } : {}),
+    ...(defaultAssignee ? { defaultAssignee } : {}),
+    ...(orchestratorProfile ? { orchestratorProfile } : {}),
+  };
+}
+
+function normalizeBoard(value: unknown): WorkboardBoard | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = typeof value.id === "string" && value.id.trim() ? value.id.trim() : "";
+  if (!id) {
+    return null;
+  }
+  const defaultWorkspace = normalizeWorkspaceValue(value.defaultWorkspace);
+  const orchestration = normalizeOrchestrationValue(value.orchestration);
+  return {
+    id,
+    ...(typeof value.name === "string" && value.name.trim() ? { name: value.name } : {}),
+    ...(typeof value.description === "string" && value.description.trim()
+      ? { description: value.description }
+      : {}),
+    ...(typeof value.icon === "string" && value.icon.trim() ? { icon: value.icon } : {}),
+    ...(typeof value.color === "string" && value.color.trim() ? { color: value.color } : {}),
+    ...(defaultWorkspace ? { defaultWorkspace } : {}),
+    ...(orchestration ? { orchestration } : {}),
+    createdAt: typeof value.createdAt === "number" ? value.createdAt : 0,
+    updatedAt: typeof value.updatedAt === "number" ? value.updatedAt : 0,
+    ...(typeof value.archivedAt === "number" ? { archivedAt: value.archivedAt } : {}),
+  };
+}
+
+function normalizeBoardsPayload(payload: unknown): WorkboardBoard[] {
+  if (!isRecord(payload) || !Array.isArray(payload.boards)) {
+    return [];
+  }
+  return payload.boards
+    .map(normalizeBoard)
+    .filter((board): board is WorkboardBoard => board !== null);
+}
+
+function normalizeBoardPayload(payload: unknown): WorkboardBoard {
+  const board = isRecord(payload) ? normalizeBoard(payload.board) : null;
+  if (!board) {
+    throw new Error("workboard response did not include a board");
+  }
+  return board;
+}
+
+export function workboardCardBoardId(card: WorkboardCard): string {
+  return card.metadata?.automation?.boardId ?? "default";
+}
+
+function activeWorkboardDraftBoardId(state: WorkboardUiState): string {
+  return state.boardFilter === "all" ? "default" : state.boardFilter;
+}
+
 function normalizeCardPayload(payload: unknown): WorkboardCard {
   const card = isRecord(payload) ? normalizeCard(payload.card) : null;
   if (!card) {
@@ -2113,8 +2300,12 @@ async function loadWorkboardInternal(
           }
         }
       }
-      const payload = await client.request("workboard.cards.list", {});
-      const normalized = normalizeCardsPayload(payload);
+      const [cardsPayload, boardsPayload] = await Promise.all([
+        client.request("workboard.cards.list", {}),
+        client.request("workboard.boards.list", {}),
+      ]);
+      const normalized = normalizeCardsPayload(cardsPayload);
+      const boards = normalizeBoardsPayload(boardsPayload);
       if (!isCurrentWorkboardLoadGeneration(params.host, generation)) {
         return false;
       }
@@ -2228,6 +2419,7 @@ async function loadWorkboardInternal(
         }
       }
       state.cards = taskLinkState.cards;
+      state.boards = boards;
       state.statuses = normalized.statuses;
       state.tasksByCardId = taskLinkState.tasksByCardId;
       state.missingTaskIds = taskLinkState.missingTaskIds;
@@ -2555,6 +2747,7 @@ function resetDraftState(state: WorkboardUiState) {
   state.draftLabels = "";
   state.draftAgentId = "";
   state.draftSessionKey = "";
+  state.draftBoardId = activeWorkboardDraftBoardId(state);
   state.draftTemplateId = "";
   state.draftCommentBody = "";
   if (resolveStaleEdit) {
@@ -2577,6 +2770,7 @@ function normalizeDraftLabels(value: string): string[] {
 }
 
 function draftPayload(state: WorkboardUiState) {
+  const boardId = state.draftBoardId || "default";
   return {
     title: state.draftTitle,
     notes: state.draftNotes,
@@ -2585,6 +2779,7 @@ function draftPayload(state: WorkboardUiState) {
     labels: normalizeDraftLabels(state.draftLabels),
     agentId: state.draftAgentId,
     sessionKey: state.draftSessionKey,
+    boardId,
     ...(state.draftTemplateId ? { templateId: state.draftTemplateId } : {}),
   };
 }
@@ -3043,6 +3238,7 @@ export async function captureSessionToWorkboard(params: {
       priority: "normal",
       agentId: "",
       sessionKey: params.session.key,
+      boardId: "default",
     });
     const card = normalizeCardPayload(payload);
     replaceCard(state, card);
@@ -3424,6 +3620,213 @@ export async function createWorkboardCard(params: {
   } finally {
     state.draftSaving = false;
     state.loading = false;
+    params.requestUpdate?.();
+  }
+}
+
+function boardIdFromName(name: string): string {
+  const normalized = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^[^a-z0-9]+/, "")
+    .replace(/[^a-z0-9]+$/, "")
+    .slice(0, 80);
+  return normalized || "board";
+}
+
+export function resetBoardDraftState(state: WorkboardUiState) {
+  state.boardDraftOpen = false;
+  state.boardDraftEditingId = null;
+  state.boardDraftConfirmDelete = false;
+  state.boardDraftName = "";
+  state.boardDraftId = "";
+  state.boardDraftDescription = "";
+  state.boardDraftIcon = "";
+  state.boardDraftColor = "";
+  state.boardDraftWorkspaceKind = "";
+  state.boardDraftWorkspacePath = "";
+  state.boardDraftWorkspaceBranch = "";
+  state.boardDraftAutoDecompose = false;
+  state.boardDraftAutoDecomposePerDispatch = "";
+  state.boardDraftDefaultAssignee = "";
+  state.boardDraftOrchestratorProfile = "";
+  state.boardDraftPickerOpen = false;
+  state.boardDraftPickerRoot = "";
+  state.boardDraftPickerPath = "";
+  state.boardDraftPickerParent = null;
+  state.boardDraftPickerEntries = [];
+  state.boardDraftPickerLoading = false;
+  state.boardDraftPickerError = null;
+}
+
+function boardDraftWorkspacePayload(state: WorkboardUiState): WorkboardWorkspace | undefined {
+  const kind = state.boardDraftWorkspaceKind;
+  if (!kind) {
+    return undefined;
+  }
+  if (kind === "scratch") {
+    return { kind };
+  }
+  // dir/worktree are meaningless without a folder, so drop them when path is blank.
+  const path = state.boardDraftWorkspacePath.trim();
+  if (!path) {
+    return undefined;
+  }
+  const branch = state.boardDraftWorkspaceBranch.trim();
+  return {
+    kind,
+    path,
+    ...(kind === "worktree" && branch ? { branch } : {}),
+  };
+}
+
+function boardDraftOrchestrationPayload(
+  state: WorkboardUiState,
+): WorkboardOrchestrationSettings | undefined {
+  const autoDecompose = state.boardDraftAutoDecompose;
+  const perDispatchRaw = state.boardDraftAutoDecomposePerDispatch.trim();
+  const perDispatchNum = perDispatchRaw ? Number.parseInt(perDispatchRaw, 10) : Number.NaN;
+  const autoDecomposePerDispatch =
+    Number.isFinite(perDispatchNum) && perDispatchNum > 0 ? perDispatchNum : undefined;
+  const defaultAssignee = state.boardDraftDefaultAssignee.trim();
+  const orchestratorProfile = state.boardDraftOrchestratorProfile.trim();
+  if (
+    !autoDecompose &&
+    autoDecomposePerDispatch === undefined &&
+    !defaultAssignee &&
+    !orchestratorProfile
+  ) {
+    return undefined;
+  }
+  return {
+    ...(autoDecompose ? { autoDecompose: true } : {}),
+    ...(autoDecomposePerDispatch !== undefined ? { autoDecomposePerDispatch } : {}),
+    ...(defaultAssignee ? { defaultAssignee } : {}),
+    ...(orchestratorProfile ? { orchestratorProfile } : {}),
+  };
+}
+
+export async function createWorkboardBoard(params: {
+  host: WorkboardHost;
+  client: GatewayBrowserClient | null;
+  name: string;
+  id?: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  requestUpdate?: () => void;
+}) {
+  const state = getWorkboardState(params.host);
+  const name = params.name.trim();
+  if (
+    !params.client ||
+    !workboardMutationsReady(state) ||
+    !name ||
+    state.dispatching ||
+    state.boardDraftSaving
+  ) {
+    return;
+  }
+  state.boardDraftSaving = true;
+  state.error = null;
+  params.requestUpdate?.();
+  const defaultWorkspace = boardDraftWorkspacePayload(state);
+  const orchestration = boardDraftOrchestrationPayload(state);
+  try {
+    const payload = await params.client.request("workboard.boards.upsert", {
+      id: params.id?.trim() || boardIdFromName(name),
+      name,
+      ...(params.description?.trim() ? { description: params.description.trim() } : {}),
+      ...(params.icon?.trim() ? { icon: params.icon.trim() } : {}),
+      ...(params.color?.trim() ? { color: params.color.trim() } : {}),
+      ...(defaultWorkspace ? { defaultWorkspace } : {}),
+      ...(orchestration ? { orchestration } : {}),
+    });
+    const board = normalizeBoardPayload(payload);
+    state.boards = [board, ...state.boards.filter((entry) => entry.id !== board.id)].sort(
+      (left, right) => left.id.localeCompare(right.id),
+    );
+    state.boardFilter = board.id;
+    state.draftBoardId = board.id;
+    resetBoardDraftState(state);
+  } catch (error) {
+    state.error = formatError(error);
+  } finally {
+    state.boardDraftSaving = false;
+    params.requestUpdate?.();
+  }
+}
+
+export async function deleteWorkboardBoard(params: {
+  host: WorkboardHost;
+  client: GatewayBrowserClient | null;
+  requestUpdate?: () => void;
+}) {
+  const state = getWorkboardState(params.host);
+  const boardId = state.boardDraftEditingId;
+  if (
+    !params.client ||
+    !boardId ||
+    // The default board is a permanent fallback; the backend also rejects this.
+    boardId === "default" ||
+    !workboardMutationsReady(state) ||
+    state.dispatching ||
+    state.boardDraftSaving ||
+    state.boardDraftDeleting
+  ) {
+    return;
+  }
+  state.boardDraftDeleting = true;
+  state.error = null;
+  params.requestUpdate?.();
+  try {
+    // Backend refuses when the board still has cards; the thrown error surfaces below.
+    await params.client.request("workboard.boards.delete", { id: boardId });
+    state.boards = state.boards.filter((board) => board.id !== boardId);
+    if (state.boardFilter === boardId) {
+      state.boardFilter = "all";
+      state.draftBoardId = "default";
+    }
+    resetBoardDraftState(state);
+  } catch (error) {
+    state.error = formatError(error);
+    state.boardDraftConfirmDelete = false;
+  } finally {
+    state.boardDraftDeleting = false;
+    params.requestUpdate?.();
+  }
+}
+
+export async function browseBoardFolders(params: {
+  host: WorkboardHost;
+  client: GatewayBrowserClient | null;
+  path?: string;
+  requestUpdate?: () => void;
+}) {
+  const state = getWorkboardState(params.host);
+  if (!params.client) {
+    return;
+  }
+  state.boardDraftPickerLoading = true;
+  state.boardDraftPickerError = null;
+  params.requestUpdate?.();
+  try {
+    const result = await params.client.request<{
+      root: string;
+      path: string;
+      parent: string | null;
+      entries: { name: string; path: string }[];
+    }>("fs.dirs.list", params.path ? { path: params.path } : {});
+    state.boardDraftPickerRoot = result.root;
+    state.boardDraftPickerPath = result.path;
+    state.boardDraftPickerParent = result.parent ?? null;
+    state.boardDraftPickerEntries = Array.isArray(result.entries) ? result.entries : [];
+  } catch (error) {
+    state.boardDraftPickerError = formatError(error);
+    state.boardDraftPickerEntries = [];
+  } finally {
+    state.boardDraftPickerLoading = false;
     params.requestUpdate?.();
   }
 }

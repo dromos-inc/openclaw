@@ -1628,6 +1628,49 @@ describe("gateway session utils", () => {
     });
   });
 
+  test("listAgentsForGateway includes effective per-agent TTS speaker selection", () => {
+    const cfg = {
+      session: { mainKey: "main" },
+      messages: {
+        tts: {
+          provider: "openai",
+          providers: {
+            openai: { speakerVoice: "alloy" },
+          },
+        },
+      },
+      agents: {
+        list: [
+          {
+            id: "main",
+            default: true,
+            tts: {
+              providers: {
+                openai: {
+                  speakerVoice: "marin",
+                  modelId: "tts-1",
+                  outputFormat: "mp3_44100_128",
+                  speed: 1.1,
+                  latencyTier: 2,
+                },
+              },
+            },
+          },
+        ],
+      },
+    } as OpenClawConfig;
+
+    const result = listAgentsForGateway(cfg);
+
+    expect(result.agents[0]?.tts).toEqual({
+      speakerVoice: "marin",
+      modelId: "tts-1",
+      outputFormat: "mp3_44100_128",
+      speed: 1.1,
+      latencyTier: 2,
+    });
+  });
+
   test("listAgentsForGateway keeps explicit agents.list scope over disk-only agents (scope boundary)", async () => {
     await withStateDirEnv("openclaw-agent-list-scope-", async ({ stateDir }) => {
       fs.mkdirSync(path.join(stateDir, "agents", "main"), { recursive: true });
